@@ -26,13 +26,18 @@ export const loadImagesFromDir = async (directoryPath: string) => {
 
   for (const entry of entries) {
     if (entry.isFile && isImageFile(entry.name)) {
-      const ext = getExtension(entry.name);
-      const mimeType = MIME_TYPES[ext] || 'image/jpeg';
+      try {
+        const ext = getExtension(entry.name);
+        const mimeType = MIME_TYPES[ext] || 'image/jpeg';
 
-      const buffer = await window.electronAPI.readFile(entry.path);
-      const uint8Array = new Uint8Array(buffer);
-      const blob = new Blob([uint8Array], { type: mimeType });
-      images.push({ image: await RawImage.fromBlob(blob), fileName: entry.name });
+        const buffer = await window.electronAPI.readFile(entry.path);
+        const uint8Array = new Uint8Array(buffer);
+        const blob = new Blob([uint8Array], { type: mimeType });
+        const image = await RawImage.fromBlob(blob);
+        images.push({ image, fileName: entry.name });
+      } catch (error) {
+        console.warn(`Skipping image "${entry.name}": could not decode`, error);
+      }
     }
   }
   return images;

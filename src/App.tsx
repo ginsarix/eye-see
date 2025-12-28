@@ -110,7 +110,7 @@ export default function App() {
       )}
 
       {queryResults?.results.map((r) => (
-        <Text>
+        <Text key={r.fileName}>
           File name: {r.fileName} Score: {r.score.toPrecision(5)}
         </Text>
       ))}
