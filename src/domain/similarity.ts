@@ -16,11 +16,10 @@ export interface SimilarityFinalResult {
   filesProcessed: number;
 }
 
-const BATCH_SIZE = 8; // Can handle larger batches with smaller model
-
 export async function* getSimilarImages(
   query: string,
   dir: string,
+  bathSize: number
 ): AsyncGenerator<SimilarityProgress, SimilarityFinalResult, unknown> {
   await waitModelLoad();
 
@@ -43,8 +42,8 @@ export async function* getSimilarImages(
   let filesProcessed = 0;
   let textEmbedding: Float32Array | number[] | undefined;
 
-  for (let i = 0; i < imageData.length; i += BATCH_SIZE) {
-    const batch = imageData.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < imageData.length; i += bathSize) {
+    const batch = imageData.slice(i, i + bathSize);
     const batchImages = batch.map((d) => d.image);
     const batchFileNames = batch.map((d) => d.fileName);
 

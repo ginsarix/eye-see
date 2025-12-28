@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState, useSyncExternalStore } from 'react';
-import { Button, Box, Text, HStack, Spinner, Input } from '@chakra-ui/react';
+import { Button, Box, Text, HStack, Spinner, Input, InputGroup, Field } from '@chakra-ui/react';
 import { ColorModeButton } from './components/ui/color-mode';
 import { subscribeToModelLoading, modelLoading } from './constants/model';
 import { LuSearch } from 'react-icons/lu';
@@ -38,12 +38,14 @@ export default function App() {
     ({ loading: boolean } & SimilarityProgress) | null
   >(null);
 
+  const [selectedBatchSize, setSelectedBatchSize] = useState('8');
+
   const querySubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     setQueryLoadState({ loading: true, filesProcessed: 0 });
     try {
-      const generator = getSimilarImages(query, directory);
+      const generator = getSimilarImages(query, directory, Number(selectedBatchSize));
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -82,10 +84,18 @@ export default function App() {
           <ColorModeButton />
         </HStack>
       </HStack>
+
       <Button colorPalette="blue" onClick={chooseDirectory}>
         Choose Directory
       </Button>
       {directory && <Text mt={4}>Selected: {directory}</Text>}
+
+      <Field.Root mt={3} w='50%' required>
+        <Field.Label>
+          Batch Size <Field.RequiredIndicator />
+        </Field.Label>
+        <Input value={selectedBatchSize} onInput={(e) => setSelectedBatchSize(e.currentTarget.value)} placeholder="8" variant="subtle" />
+      </Field.Root>
 
       <HStack mt={10}>
         <form onSubmit={querySubmit} css={{ display: 'contents' }}>
