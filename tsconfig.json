@@ -1,16 +1,19 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "commonjs",
+    "strict": true,
+    "module": "ESNext",
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "verbatimModuleSyntax": true,
     "noImplicitAny": true,
     "sourceMap": true,
     "baseUrl": ".",
     "outDir": "dist",
     "jsx": "react-jsx",
-    "moduleResolution": "node",
+    "jsxImportSource": "@emotion/react",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true
   }
 }

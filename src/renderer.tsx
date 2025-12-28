@@ -1,9 +1,15 @@
+import { createRoot } from 'react-dom/client';
 import App from './App';
+import { Provider } from './components/ui/provider';
+import { loadModel } from './constants/model';
 import './index.css';
 
+// Load model in background - don't block render
+loadModel();
 
-import { createRoot } from 'react-dom/client';
-
-// Render your React component instead
-const root = createRoot(document.getElementById('app'));
-root.render(<App />);
+const root = createRoot(document.getElementById('app')!);
+root.render(
+  <Provider>
+    <App />
+  </Provider>,
+);

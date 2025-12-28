@@ -1,7 +1,7 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import started from 'electron-squirrel-startup';
-import { loadModel } from './constants/model';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -29,11 +29,39 @@ const createWindow = () => {
   mainWindow.webContents.openDevTools();
 };
 
+// IPC Handlers
+ipcMain.handle('dialog:openDirectory', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('fs:readDirectory', async (_event, directoryPath: string) => {
+  const fullPath = path.resolve(directoryPath);
+  const entries = await fs.readdir(fullPath);
+  const files: { name: string; path: string; isFile: boolean }[] = [];
+
+  for (const entry of entries) {
+    const filePath = path.join(fullPath, entry);
+    const stats = await fs.stat(filePath);
+    files.push({
+      name: entry,
+      path: filePath,
+      isFile: stats.isFile(),
+    });
+  }
+  return files;
+});
+
+ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
+  const buffer = await fs.readFile(filePath);
+  return buffer;
+});
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', async () => {
-  await loadModel();
+app.on('ready', () => {
   createWindow();
 });
 

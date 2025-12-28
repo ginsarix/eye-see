@@ -1,17 +1,38 @@
 import { RawImage } from '@huggingface/transformers';
-import path from 'node:path';
-import fs from 'node:fs/promises';
 
-export const loadImagesFromDir = async (directoryPath: string): Promise<RawImage[]> => {
-  const fullPath = path.resolve(directoryPath);
-  const entries = await fs.readdir(fullPath);
-  const images: RawImage[] = [];
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
+
+const MIME_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+};
+
+function getExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf('.');
+  return idx !== -1 ? fileName.slice(idx).toLowerCase() : '';
+}
+
+function isImageFile(fileName: string): boolean {
+  return IMAGE_EXTENSIONS.has(getExtension(fileName));
+}
+
+export const loadImagesFromDir = async (directoryPath: string) => {
+  const entries = await window.electronAPI.readDirectory(directoryPath);
+  const images: { image: RawImage; fileName: string }[] = [];
 
   for (const entry of entries) {
-    const filePath = path.join(fullPath, entry);
-    const stats = await fs.stat(filePath);
-    if (stats.isFile()) {
-      images.push(await RawImage.read(filePath));
+    if (entry.isFile && isImageFile(entry.name)) {
+      const ext = getExtension(entry.name);
+      const mimeType = MIME_TYPES[ext] || 'image/jpeg';
+
+      const buffer = await window.electronAPI.readFile(entry.path);
+      const uint8Array = new Uint8Array(buffer);
+      const blob = new Blob([uint8Array], { type: mimeType });
+      images.push({ image: await RawImage.fromBlob(blob), fileName: entry.name });
     }
   }
   return images;

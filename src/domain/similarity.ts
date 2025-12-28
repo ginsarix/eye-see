@@ -1,28 +1,73 @@
-import {
-  cos_sim, // Built-in cosine similarity!
-} from '@xenova/transformers';
-import { model } from '../constants/model';
+import { cos_sim } from '@huggingface/transformers';
+import { model, waitModelLoad } from '../constants/model';
 import { loadImagesFromDir } from './image';
 
-export async function getSimilarImages(query: string) {
-  const textInputs = model.tokenizer(query, { padding: true, truncation: true });
-  const textOutput = await model.textModel(textInputs);
-  const textEmbedding = textOutput.text_embeds; // Normalized!
+export interface SimilarityMatch {
+  fileName: string;
+  score: number;
+}
 
-  // Batch load and process images
-  const images = await loadImagesFromDir('~/Downloads');
-  const imageInputs = await model.visionProcessor(images);
-  const imageOutput = await model.visionModel(imageInputs);
-  const imageEmbeddings = imageOutput.image_embeds; // Shape: [num_images, dim]
+export interface SimilarityProgress {
+  filesProcessed: number;
+}
 
-  // Compute similarities (text vs all images)
-  const similarities = [];
-  for (let i = 0; i < imageEmbeddings.length; i++) {
-    const sim = cos_sim(textEmbedding.data, imageEmbeddings[i].data); // Transformers.js has cos_sim!
-    similarities.push({ index: i, score: sim });
+export interface SimilarityFinalResult {
+  results: SimilarityMatch[];
+  filesProcessed: number;
+}
+
+const BATCH_SIZE = 8; // Can handle larger batches with smaller model
+
+export async function* getSimilarImages(
+  query: string,
+  dir: string,
+): AsyncGenerator<SimilarityProgress, SimilarityFinalResult, unknown> {
+  await waitModelLoad();
+
+  if (!model) {
+    return { results: [], filesProcessed: 0 };
   }
 
-  // Sort and get top matches
-  similarities.sort((a, b) => b.score - a.score);
-  return similarities.slice(0, 10);
+  // Load images with filenames
+  const imageData = await loadImagesFromDir(dir);
+
+  if (imageData.length === 0) {
+    return { results: [], filesProcessed: 0 };
+  }
+
+  // Get text embedding (run model with text only, use a dummy image for first call)
+  const textInputs = model.tokenizer([query], { padding: true, truncation: true });
+
+  // Process images in batches
+  const allResults: SimilarityMatch[] = [];
+  let filesProcessed = 0;
+  let textEmbedding: Float32Array | number[] | undefined;
+
+  for (let i = 0; i < imageData.length; i += BATCH_SIZE) {
+    const batch = imageData.slice(i, i + BATCH_SIZE);
+    const batchImages = batch.map((d) => d.image);
+    const batchFileNames = batch.map((d) => d.fileName);
+
+    const imageInputs = await model.processor(batchImages);
+
+    // Run model with both text and image inputs
+    const outputs = await model.model({ ...textInputs, ...imageInputs });
+
+    // Get text embedding from first batch (it's the same for all)
+    if (!textEmbedding) {
+      textEmbedding = outputs.text_embeds[0].data;
+    }
+
+    // Compare each image embedding with text embedding
+    for (let j = 0; j < batch.length; j++) {
+      const score = cos_sim(textEmbedding as number[], outputs.image_embeds[j].data);
+      allResults.push({ fileName: batchFileNames[j], score });
+    }
+
+    filesProcessed += batch.length;
+    yield { filesProcessed };
+  }
+
+  allResults.sort((a, b) => b.score - a.score);
+  return { results: allResults.slice(0, 10), filesProcessed };
 }
