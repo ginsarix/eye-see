@@ -36,3 +36,8 @@ Use `pnpm` (see `packageManager` in `package.json`).
 - E2E specs live in `e2e/specs/*.e2e.ts` with their own `e2e/tsconfig.json`, and they search the fixture images in `src/test/images/`. They use `@wdio/tauri-service` with the `embedded` driver: the `tauri-plugin-wdio-webdriver` crate is an optional dependency enabled only by the `e2e` cargo feature. It exposes an automation server over HTTP, so never enable that feature in release builds.
 - The native folder dialog can't be driven by WebDriver, so the e2e spec seeds `localStorage['directory']` and reloads.
 - `wdio.conf.ts`'s `before` hook calls `switchToWindow` on purpose: without it the service tries to query `tauri-plugin-wdio` (not installed) before most commands and waits for a 5s timeout each time.
+
+## Git workflow
+
+- Build non-trivial features on a branch and merge them into `main` with a merge commit: `git merge --no-ff <branch>`. Never fast-forward them. Trivial changes (typos, docs, one-line fixes, chores) can be committed directly to `main`.
+- Always pass `--no-ff` explicitly. The `merge.ff = false` setting lives in the local `.git/config`, so it isn't shared with other clones.
