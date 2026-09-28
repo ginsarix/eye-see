@@ -26,6 +26,11 @@ tauri = { version = "2.12.0", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["fs"] }
+tauri-plugin-wdio-webdriver = { version = "1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
+
+[features]
+# Embeds a WebDriver server for the WebdriverIO e2e tests. Never enable in release builds.
+e2e = ["dep:tauri-plugin-wdio-webdriver"]
