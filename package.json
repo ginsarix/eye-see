@@ -2,14 +2,13 @@
   "name": "eye-see",
   "productName": "eye-see",
   "version": "1.0.0",
-  "description": "My Electron application description",
-  "main": ".vite/build/main.js",
+  "description": "Search a folder of images with natural language, powered by CLIP",
   "scripts": {
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "lint": "eslint --ext .ts,.tsx src"
   },
   "keywords": [],
   "author": {
@@ -19,43 +18,35 @@
   "license": "MIT",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "electron",
-      "electron-winstaller"
+      "esbuild"
     ]
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.10.2",
-    "@electron-forge/maker-deb": "^7.10.2",
-    "@electron-forge/maker-rpm": "^7.10.2",
-    "@electron-forge/maker-squirrel": "^7.10.2",
-    "@electron-forge/maker-zip": "^7.10.2",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
-    "@electron-forge/plugin-fuses": "^7.10.2",
-    "@electron-forge/plugin-vite": "^7.10.2",
-    "@electron/fuses": "^1.8.0",
-    "@types/electron-squirrel-startup": "^1.0.2",
+    "@tauri-apps/cli": "^2.12.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "39.2.7",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^3.6.3",
     "eslint-plugin-import": "^2.32.0",
-    "typescript": "~4.5.5",
+    "typescript": "~5.9.3",
     "vite": "^5.4.21"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.30.0",
     "@emotion/react": "^11.14.0",
     "@huggingface/transformers": "^3.8.1",
-    "electron-squirrel-startup": "^1.0.1",
+    "@tauri-apps/api": "^2.12.0",
+    "@tauri-apps/plugin-dialog": "^2.8.0",
+    "jotai": "^2.16.1",
     "ml-distance": "^4.0.1",
     "next-themes": "^0.4.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-icons": "^5.5.0"
   },
-  "packageManager": "pnpm@10.26.2+sha512.0e308ff2005fc7410366f154f625f6631ab2b16b1d2e70238444dd6ae9d630a8482d92a451144debc492416896ed16f7b114a86ec68b8404b2443869e68ffda6"
+  "packageManager": "pnpm@10.26.2+sha512.0e308ff2005fc7410366f154f625f6631ab2b16b1d2e70238444dd6ae9d630a8482d92a451144debc492416896ed16f7b114a86ec68b8404b2443869e68ffda6",
+  "type": "module"
 }

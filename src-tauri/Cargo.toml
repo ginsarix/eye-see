@@ -1,0 +1,31 @@
+[package]
+name = "eye-see"
+version = "1.0.0"
+description = "Search a folder of images with natural language, powered by CLIP"
+authors = ["Can <cankomusdogan@gmail.com>"]
+license = "MIT"
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix avoids a name clash with the binary on Windows.
+name = "eye_see_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.0", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.0", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["fs"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

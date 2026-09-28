@@ -1,4 +1,5 @@
 import { RawImage } from '@huggingface/transformers';
+import { readDirectory, readFile } from '../api/fs';
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
 
@@ -21,7 +22,7 @@ function isImageFile(fileName: string): boolean {
 }
 
 export const loadImagesFromDir = async (directoryPath: string) => {
-  const entries = await window.electronAPI.readDirectory(directoryPath);
+  const entries = await readDirectory(directoryPath);
   const images: { image: RawImage; fileName: string }[] = [];
 
   for (const entry of entries) {
@@ -30,7 +31,7 @@ export const loadImagesFromDir = async (directoryPath: string) => {
         const ext = getExtension(entry.name);
         const mimeType = MIME_TYPES[ext] || 'image/jpeg';
 
-        const buffer = await window.electronAPI.readFile(entry.path);
+        const buffer = await readFile(entry.path);
         const uint8Array = new Uint8Array(buffer);
         const blob = new Blob([uint8Array], { type: mimeType });
         const image = await RawImage.fromBlob(blob);

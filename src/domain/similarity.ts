@@ -19,7 +19,7 @@ export interface SimilarityFinalResult {
 export async function* getSimilarImages(
   query: string,
   dir: string,
-  bathSize: number
+  batchSize: number,
 ): AsyncGenerator<SimilarityProgress, SimilarityFinalResult, unknown> {
   await waitModelLoad();
 
@@ -34,7 +34,7 @@ export async function* getSimilarImages(
     return { results: [], filesProcessed: 0 };
   }
 
-  // Get text embedding (run model with text only, use a dummy image for first call)
+  // Get text embedding
   const textInputs = model.tokenizer([query], { padding: true, truncation: true });
 
   // Process images in batches
@@ -42,8 +42,8 @@ export async function* getSimilarImages(
   let filesProcessed = 0;
   let textEmbedding: Float32Array | number[] | undefined;
 
-  for (let i = 0; i < imageData.length; i += bathSize) {
-    const batch = imageData.slice(i, i + bathSize);
+  for (let i = 0; i < imageData.length; i += batchSize) {
+    const batch = imageData.slice(i, i + batchSize);
     const batchImages = batch.map((d) => d.image);
     const batchFileNames = batch.map((d) => d.fileName);
 

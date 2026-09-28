@@ -33,6 +33,19 @@ function setModelLoading(loading: boolean) {
   loadingListeners.forEach((cb) => cb(loading));
 }
 
+// WebGPU availability depends on the platform webview (e.g. WebKitGTK on Linux
+// lacks it), so fall back to WASM when no adapter is available.
+async function pickDevice(): Promise<'webgpu' | 'wasm'> {
+  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  try {
+    if (gpu && (await gpu.requestAdapter())) return 'webgpu';
+  } catch {
+    // fall through
+  }
+  console.warn('WebGPU unavailable, falling back to WASM');
+  return 'wasm';
+}
+
 export async function loadModel() {
   setModelLoading(true);
   try {
@@ -41,7 +54,7 @@ export async function loadModel() {
       tokenizer: await AutoTokenizer.from_pretrained(modelId),
       model: (await CLIPModel.from_pretrained(modelId, {
         dtype: 'fp32',
-        device: 'webgpu',
+        device: await pickDevice(),
       })) as CLIPModel,
     };
   } finally {

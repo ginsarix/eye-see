@@ -1,5 +1,5 @@
-import { type FormEvent, useEffect, useState, useSyncExternalStore } from 'react';
-import { Button, Box, Text, HStack, Spinner, Input, InputGroup, Field } from '@chakra-ui/react';
+import { type FormEvent, useState, useSyncExternalStore } from 'react';
+import { Button, Box, Text, HStack, Spinner, Input, chakra } from '@chakra-ui/react';
 import { ColorModeButton } from './components/ui/color-mode';
 import { subscribeToModelLoading, modelLoading } from './constants/model';
 import { LuSearch } from 'react-icons/lu';
@@ -8,29 +8,21 @@ import {
   type SimilarityProgress,
   type SimilarityFinalResult,
 } from './domain/similarity';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { directoryAtom, directoryFieldInvalidAtom } from './atoms/directory';
+import { batchSizeAtom, batchSizeFieldInvalidAtom } from './atoms/batch-size';
+import { DirectorySelector } from './components/directory-selector';
+import { BatchSizeSelector } from './components/batch-size-selector';
 
 function useModelLoading() {
   return useSyncExternalStore(subscribeToModelLoading, () => modelLoading);
 }
 
 export default function App() {
-  const [directory, setDirectory] = useState('');
+  const directory = useAtomValue(directoryAtom);
+  const setDirectoryFieldInvalid = useSetAtom(directoryFieldInvalidAtom);
+
   const isModelLoading = useModelLoading();
-
-  useEffect(() => {
-    const directory = localStorage.getItem('directory');
-    if (directory) {
-      setDirectory(directory);
-    }
-  }, []);
-
-  const chooseDirectory = async () => {
-    const result = await window.electronAPI.openDirectory();
-    if (!result) return;
-
-    localStorage.setItem('directory', result);
-    setDirectory(result);
-  };
 
   const [query, setQuery] = useState('');
   const [queryResults, setQueryResults] = useState<SimilarityFinalResult>();
@@ -38,14 +30,25 @@ export default function App() {
     ({ loading: boolean } & SimilarityProgress) | null
   >(null);
 
-  const [selectedBatchSize, setSelectedBatchSize] = useState('8');
+  const selectedBatchSize = useAtomValue(batchSizeAtom);
+  const setBatchSizeFieldInvalid = useSetAtom(batchSizeFieldInvalidAtom);
 
   const querySubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    if (!directory) {
+      setDirectoryFieldInvalid(true);
+      return;
+    }
+
+    if (selectedBatchSize < 1) {
+      setBatchSizeFieldInvalid(true);
+      return;
+    }
+
     setQueryLoadState({ loading: true, filesProcessed: 0 });
     try {
-      const generator = getSimilarImages(query, directory, Number(selectedBatchSize));
+      const generator = getSimilarImages(query, directory, selectedBatchSize);
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -85,20 +88,12 @@ export default function App() {
         </HStack>
       </HStack>
 
-      <Button colorPalette="blue" onClick={chooseDirectory}>
-        Choose Directory
-      </Button>
-      {directory && <Text mt={4}>Selected: {directory}</Text>}
+      <DirectorySelector />
 
-      <Field.Root mt={3} w='50%' required>
-        <Field.Label>
-          Batch Size <Field.RequiredIndicator />
-        </Field.Label>
-        <Input value={selectedBatchSize} onInput={(e) => setSelectedBatchSize(e.currentTarget.value)} placeholder="8" variant="subtle" />
-      </Field.Root>
+      <BatchSizeSelector />
 
       <HStack mt={10}>
-        <form onSubmit={querySubmit} css={{ display: 'contents' }}>
+        <chakra.form onSubmit={querySubmit} display="contents">
           <Input
             value={query}
             onInput={(e) => setQuery(e.currentTarget.value)}
@@ -112,7 +107,7 @@ export default function App() {
           >
             <LuSearch />
           </Button>
-        </form>
+        </chakra.form>
       </HStack>
 
       {queryLoadState?.filesProcessed && (
