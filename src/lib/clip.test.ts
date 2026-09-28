@@ -45,11 +45,11 @@ describe('clip', () => {
     await clip.loadModel();
 
     expect(clip.model).toEqual({ processor: 'processor', tokenizer: 'tokenizer', model: 'model' });
-    expect(clip.modelLoadState).toEqual({ status: 'idle' });
+    expect(clip.modelLoadState).toEqual({ status: 'ready' });
     expect(listener.mock.calls.map(([state]) => state)).toEqual([
       { status: 'downloading', progress: null },
       { status: 'downloading', progress: null },
-      { status: 'idle' },
+      { status: 'ready' },
     ]);
   });
 
@@ -65,13 +65,13 @@ describe('clip', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('clears the loading state when loading fails', async () => {
+  it('reports an error when loading fails', async () => {
     vi.mocked(CLIPModel.from_pretrained).mockRejectedValue(new Error('offline'));
     const clip = await importClip();
 
     await expect(clip.loadModel()).rejects.toThrow('offline');
 
-    expect(clip.modelLoadState).toEqual({ status: 'idle' });
+    expect(clip.modelLoadState).toEqual({ status: 'error' });
     expect(clip.model).toBeUndefined();
   });
 
@@ -107,7 +107,7 @@ describe('clip', () => {
       { status: 'downloading', progress: 55 },
       { status: 'downloading', progress: 100 },
       { status: 'preparing' },
-      { status: 'idle' },
+      { status: 'ready' },
     ]);
   });
 
@@ -132,7 +132,7 @@ describe('clip', () => {
 
     expect(listener.mock.calls.map(([state]) => state)).toEqual([
       { status: 'downloading', progress: null },
-      { status: 'idle' },
+      { status: 'ready' },
     ]);
   });
 

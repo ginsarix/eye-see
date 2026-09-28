@@ -36,8 +36,8 @@ describe('useModelLoadState', () => {
     act(() => clip.setState({ status: 'preparing' }));
     expect(result.current).toEqual({ status: 'preparing' });
 
-    act(() => clip.setState({ status: 'idle' }));
-    expect(result.current).toEqual({ status: 'idle' });
+    act(() => clip.setState({ status: 'ready' }));
+    expect(result.current).toEqual({ status: 'ready' });
 
     unmount();
     expect(clip.listeners.size).toBe(0);

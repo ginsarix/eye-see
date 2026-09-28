@@ -6,8 +6,14 @@ import { getSimilarImages } from './lib/similarity';
 import { renderWithStore } from './test/utils';
 import App from './app';
 
+const clip = vi.hoisted(() => ({
+  modelLoadState: { status: 'ready' } as import('./lib/clip').ModelLoadState,
+}));
+
 vi.mock('./lib/clip', () => ({
-  modelLoadState: { status: 'idle' },
+  get modelLoadState() {
+    return clip.modelLoadState;
+  },
   subscribeToModelLoadState: () => () => undefined,
 }));
 
@@ -15,6 +21,7 @@ vi.mock('./lib/similarity', () => ({ getSimilarImages: vi.fn() }));
 
 describe('App', () => {
   beforeEach(() => {
+    clip.modelLoadState = { status: 'ready' };
     mockIPC((cmd) => {
       if (cmd === 'plugin:dialog|open') return '/photos';
     });
@@ -29,6 +36,22 @@ describe('App', () => {
         ],
       };
     });
+  });
+
+  it.each([
+    ['downloading', { status: 'downloading', progress: 30 }],
+    ['being prepared', { status: 'preparing' }],
+    ['failed to load', { status: 'error' }],
+  ] as const)('blocks searching while the model is %s', async (_, state) => {
+    clip.modelLoadState = state;
+    renderWithStore(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Choose Directory' }));
+    await screen.findByText('Selected: /photos');
+
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+    await userEvent.type(screen.getByPlaceholderText('Query'), 'sunset{Enter}');
+
+    expect(getSimilarImages).not.toHaveBeenCalled();
   });
 
   it('asks for a directory before searching', async () => {

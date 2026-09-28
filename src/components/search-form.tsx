@@ -5,13 +5,15 @@ import { Button } from './ui/button';
 type SearchFormProps = {
   onSearch: (query: string) => void;
   loading?: boolean;
+  disabled?: boolean;
 };
 
-export function SearchForm({ onSearch, loading }: SearchFormProps) {
+export function SearchForm({ onSearch, loading, disabled }: SearchFormProps) {
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (disabled) return;
     onSearch(query);
   };
 
@@ -23,7 +25,7 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
         placeholder="Query"
         className="h-10 w-full min-w-0 rounded-md border border-zinc-200 bg-transparent px-3 outline-none placeholder:text-zinc-500 focus-visible:border-blue-600 focus-visible:ring-1 focus-visible:ring-blue-600 dark:border-zinc-800"
       />
-      <Button type="submit" aria-label="Search" loading={loading}>
+      <Button type="submit" aria-label="Search" loading={loading} disabled={disabled}>
         <LuSearch className="size-4" />
       </Button>
     </form>

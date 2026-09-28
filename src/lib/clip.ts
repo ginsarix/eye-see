@@ -22,7 +22,8 @@ export let model:
 export type ModelLoadState =
   | { status: 'downloading'; progress: number | null }
   | { status: 'preparing' }
-  | { status: 'idle' };
+  | { status: 'ready' }
+  | { status: 'error' };
 
 export let modelLoadState: ModelLoadState = { status: 'downloading', progress: null };
 const loadStateListeners: Array<(state: ModelLoadState) => void> = [];
@@ -86,8 +87,10 @@ export async function loadModel() {
         progress_callback: onProgress,
       })) as CLIPModel,
     };
-  } finally {
-    setModelLoadState({ status: 'idle' });
+    setModelLoadState({ status: 'ready' });
+  } catch (error) {
+    setModelLoadState({ status: 'error' });
+    throw error;
   }
 }
 

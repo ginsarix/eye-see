@@ -57,7 +57,8 @@ describe('image search', () => {
     await browser.refresh();
 
     await expect($(`p=Selected: ${imagesDir}`)).toBeDisplayed();
-    await browser.waitUntil(async () => !(await $('span=Loading model...').isExisting()), {
+    // Searching stays disabled until the model has downloaded and is ready
+    await browser.waitUntil(() => $('button[aria-label="Search"]').isEnabled(), {
       timeout: 10 * 60_000,
       interval: 1_000,
       timeoutMsg: 'The CLIP model did not finish loading',

@@ -23,6 +23,18 @@ describe('SearchForm', () => {
     expect(onSearch).toHaveBeenCalledWith('dogs');
   });
 
+  it('blocks searching while disabled', async () => {
+    const onSearch = vi.fn();
+    render(<SearchForm onSearch={onSearch} disabled />);
+
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+
+    // Typing the query ahead of time still works, submitting doesn't
+    await userEvent.type(screen.getByPlaceholderText('Query'), 'dogs{Enter}');
+    expect(screen.getByPlaceholderText('Query')).toHaveValue('dogs');
+    expect(onSearch).not.toHaveBeenCalled();
+  });
+
   it('disables searching while loading', () => {
     render(<SearchForm onSearch={vi.fn()} loading />);
 

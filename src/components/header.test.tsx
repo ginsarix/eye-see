@@ -33,8 +33,16 @@ describe('Header', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
+  it('shows an error when the model fails to load', () => {
+    vi.mocked(useModelLoadState).mockReturnValue({ status: 'error' });
+    render(<Header />);
+
+    expect(screen.getByText('Model failed to load')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+  });
+
   it('hides the loading indicator once the model is loaded', () => {
-    vi.mocked(useModelLoadState).mockReturnValue({ status: 'idle' });
+    vi.mocked(useModelLoadState).mockReturnValue({ status: 'ready' });
     render(<Header />);
 
     expect(screen.queryByText(/model\.\.\./)).not.toBeInTheDocument();

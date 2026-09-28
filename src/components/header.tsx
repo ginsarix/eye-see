@@ -5,7 +5,11 @@ import { ProgressBar } from './ui/progress-bar';
 import { Spinner } from './ui/spinner';
 
 function ModelLoadIndicator({ state }: { state: ModelLoadState }) {
-  if (state.status === 'idle') return null;
+  if (state.status === 'ready') return null;
+
+  if (state.status === 'error') {
+    return <span className="text-sm text-red-600 dark:text-red-400">Model failed to load</span>;
+  }
 
   return (
     <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
