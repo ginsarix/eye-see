@@ -1,51 +1,37 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useModelLoadState } from '../hooks/use-model-load-state';
+import type { ModelLoadState } from '../lib/clip';
 import { Header } from './header';
 
 vi.mock('../hooks/use-model-load-state', () => ({ useModelLoadState: vi.fn() }));
 
 describe('Header', () => {
-  it('shows a spinner before the download progress is known', () => {
-    vi.mocked(useModelLoadState).mockReturnValue({ status: 'downloading', progress: null });
-    render(<Header />);
-
-    expect(screen.getByRole('heading', { name: 'Eye See' })).toBeInTheDocument();
-    expect(screen.getByText('Loading model...')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
-
-  it('shows download progress as a bar and percentage', () => {
-    vi.mocked(useModelLoadState).mockReturnValue({ status: 'downloading', progress: 42 });
-    render(<Header />);
-
-    expect(screen.getByText('Downloading model... 42%')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
-  });
-
-  it('shows a spinner while the model is prepared after downloading', () => {
-    vi.mocked(useModelLoadState).mockReturnValue({ status: 'preparing' });
-    render(<Header />);
-
-    expect(screen.getByText('Preparing model...')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
-
-  it('shows an error when the model fails to load', () => {
-    vi.mocked(useModelLoadState).mockReturnValue({ status: 'error' });
-    render(<Header />);
-
-    expect(screen.getByText('Model failed to load')).toBeInTheDocument();
-    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
-  });
-
-  it('hides the loading indicator once the model is loaded', () => {
+  it('shows the app name', () => {
     vi.mocked(useModelLoadState).mockReturnValue({ status: 'ready' });
     render(<Header />);
 
-    expect(screen.queryByText(/model\.\.\./)).not.toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Eye See' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle color mode' })).toBeInTheDocument();
+  });
+
+  it.each<[string, ModelLoadState, string]>([
+    ['before the download progress is known', { status: 'downloading', progress: null }, 'Loading model…'],
+    ['while downloading', { status: 'downloading', progress: 42 }, 'Downloading model · 42%'],
+    ['while the model is prepared', { status: 'preparing' }, 'Preparing model…'],
+    ['once the model is ready', { status: 'ready' }, 'Model ready'],
+    ['when the model fails to load', { status: 'error' }, 'Model failed to load'],
+  ])('reports the model state %s', (_, state, text) => {
+    vi.mocked(useModelLoadState).mockReturnValue(state);
+    render(<Header />);
+
+    expect(screen.getByRole('status')).toHaveTextContent(text);
+  });
+
+  it('marks a failed model load as an error', () => {
+    vi.mocked(useModelLoadState).mockReturnValue({ status: 'error' });
+    render(<Header />);
+
+    expect(screen.getByRole('status')).toHaveClass('text-danger');
   });
 });

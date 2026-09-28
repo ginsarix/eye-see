@@ -2,6 +2,102 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme inline {
+  --font-sans: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-canvas: var(--canvas);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-stripe: var(--stripe);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+
+  --animate-orbit: orbit 60s linear infinite;
+  --animate-orbit-reverse: orbit 40s linear infinite reverse;
+  --animate-sweep: orbit 1.4s linear infinite;
+  --animate-breathe: breathe 1.6s ease-in-out infinite;
+
+  @keyframes orbit {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+/*
+ * `accent` is for fills (with `on-accent` text on top); `accent-ink` is for
+ * accent-coloured text and strokes on the canvas, which in light mode needs to
+ * be much darker than the fill to stay legible.
+ */
+:root {
+  --canvas: #f4f2ea;
+  --glow: #fdfcf6;
+  --raised: #fffefa;
+  --ink: #16150f;
+  --muted: #69665b;
+  --faint: #9a978b;
+  --placeholder: #b3b0a4;
+  --line: rgb(22 21 15 / 0.1);
+  --line-strong: rgb(22 21 15 / 0.28);
+  --stripe: #e6e3d8;
+  --accent: oklch(0.86 0.2 124);
+  --accent-ink: oklch(0.5 0.14 128);
+  --on-accent: #16150f;
+  --danger: oklch(0.55 0.2 27);
+}
+
+:root.dark {
+  --canvas: #0b0b09;
+  --glow: #17170f;
+  --raised: #1a1a14;
+  --ink: #efece2;
+  --muted: #9b978a;
+  --faint: #6f6c62;
+  --placeholder: #5f5c53;
+  --line: rgb(239 236 226 / 0.08);
+  --line-strong: rgb(239 236 226 / 0.22);
+  --stripe: #1c1c16;
+  --accent: oklch(0.9 0.19 122);
+  --accent-ink: oklch(0.9 0.19 122);
+  --on-accent: #0b0b09;
+  --danger: oklch(0.72 0.17 27);
+}
+
+/* Small uppercase mono labels that head each panel */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The diagonal hatching used for image placeholders */
+@utility hatched {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--stripe) 0 6px,
+    color-mix(in srgb, var(--stripe) 55%, var(--canvas)) 6px 12px
+  );
+}
+
 @layer base {
   html {
     color-scheme: light;
@@ -12,6 +108,17 @@
   }
 
   body {
-    @apply mx-auto max-w-[38rem] bg-white p-8 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50;
+    @apply m-0 bg-canvas font-sans text-ink antialiased;
+    background-image: radial-gradient(1200px 700px at 50% 38%, var(--glow) 0%, var(--canvas) 70%);
+    background-attachment: fixed;
+  }
+
+  ::placeholder {
+    color: var(--placeholder);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
   }
 }

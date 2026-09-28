@@ -1,24 +1,38 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ImageSearch } from '../hooks/use-image-search';
 import { loadImageUrl } from '../lib/images';
-import type { SimilarityFinalResult } from '../lib/similarity';
 import { SearchResults } from './search-results';
 
 vi.mock('../lib/images', () => ({ loadImageUrl: vi.fn() }));
 
-const results: SimilarityFinalResult = {
-  filesProcessed: 2,
-  results: [
-    { fileName: 'cat.jpg', path: '/d/cat.jpg', score: 0.312345678 },
-    { fileName: 'dog.png', path: '/d/dog.png', score: 0.25 },
-  ],
-};
+function searchWith(patch: Partial<ImageSearch> = {}): ImageSearch {
+  return {
+    id: 1,
+    query: 'a cat',
+    batchSize: 8,
+    status: 'done',
+    files: ['cat.jpg', 'pets/dog.png', 'car.webp'],
+    filesProcessed: 3,
+    results: [
+      { fileName: 'cat.jpg', path: '/d/cat.jpg', score: 0.312345678 },
+      { fileName: 'pets/dog.png', path: '/d/pets/dog.png', score: 0.25 },
+    ],
+    elapsedMs: 1234,
+    ...patch,
+  };
+}
 
-function renderResults() {
-  return render(
-    <SearchResults loadState={{ loading: false, filesProcessed: 2 }} results={results} />,
-  );
+const rows = () =>
+  within(screen.getByRole('list', { name: 'Search results' })).getAllByRole('listitem');
+const pressedRow = () => screen.getByRole('button', { pressed: true });
+
+async function openPreview(fileName: string) {
+  const thumbnail = screen.getByRole('button', { name: `Preview ${fileName}` });
+  await vi.waitFor(() => expect(thumbnail).toBeEnabled());
+  await userEvent.click(thumbnail);
+  return screen.getByRole('dialog');
 }
 
 describe('SearchResults', () => {
@@ -27,40 +41,46 @@ describe('SearchResults', () => {
     vi.mocked(loadImageUrl).mockImplementation(async (path) => `blob:${path}`);
   });
 
-  it('renders nothing before a search', () => {
-    const { container } = render(<SearchResults loadState={null} />);
+  it('prompts for a search before there is one', () => {
+    render(<SearchResults search={null} />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText('Describe an image and press Look.')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Search results' })).not.toBeInTheDocument();
   });
 
-  it('shows how many files were processed', () => {
-    render(<SearchResults loadState={{ loading: true, filesProcessed: 12 }} />);
+  it('shows progress while searching', () => {
+    render(<SearchResults search={searchWith({ status: 'searching', filesProcessed: 2, results: [] })} />);
 
-    expect(screen.getByText('Files processed: 12')).toBeInTheDocument();
+    const ranked = screen.getByRole('region', { name: 'Ranked' });
+    expect(within(ranked).getByText('Files processed')).toBeInTheDocument();
+    expect(within(ranked).getByText('/3')).toBeInTheDocument();
+    expect(screen.getByText('Looking…')).toBeInTheDocument();
   });
 
-  // Known bug: `filesProcessed && ...` renders a literal "0" when a search starts
-  it.fails('renders nothing when no files have been processed yet', () => {
-    const { container } = render(
-      <SearchResults loadState={{ loading: true, filesProcessed: 0 }} />,
-    );
+  it('says when the folder has no images', () => {
+    render(<SearchResults search={searchWith({ files: [], filesProcessed: 0, results: [] })} />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText('No images found in this folder.')).toBeInTheDocument();
   });
 
-  it('shows a thumbnail for each result with its score to 5 significant digits', async () => {
-    renderResults();
+  it('says when the search failed', () => {
+    render(<SearchResults search={searchWith({ status: 'error', results: [] })} />);
 
-    const items = within(screen.getByRole('list', { name: 'Search results' })).getAllByRole(
-      'listitem',
-    );
-    expect(items).toHaveLength(2);
-    expect(within(items[0]).getByText('cat.jpg')).toBeInTheDocument();
-    expect(within(items[0]).getByText('Score: 0.31235')).toBeInTheDocument();
-    expect(within(items[1]).getByText('dog.png')).toBeInTheDocument();
-    expect(within(items[1]).getByText('Score: 0.25000')).toBeInTheDocument();
+    expect(screen.getByText(/Search failed/)).toBeInTheDocument();
+  });
 
-    const thumbnail = await screen.findByRole('button', { name: 'Preview cat.jpg' });
+  it('ranks the results with their paths and scores to 5 decimal places', async () => {
+    render(<SearchResults search={searchWith()} />);
+
+    expect(rows()).toHaveLength(2);
+    expect(within(rows()[0]).getByText('01')).toBeInTheDocument();
+    expect(within(rows()[0]).getByText('0.31235')).toBeInTheDocument();
+    expect(within(rows()[1]).getByText('pets/')).toBeInTheDocument();
+    expect(within(rows()[1]).getByText('dog.png')).toBeInTheDocument();
+    expect(within(rows()[1]).getByText('0.25000')).toBeInTheDocument();
+    expect(screen.getByText('"a cat"')).toBeInTheDocument();
+
+    const thumbnail = screen.getByRole('button', { name: 'Preview cat.jpg' });
     await vi.waitFor(() => expect(thumbnail).toBeEnabled());
     expect(thumbnail.querySelector('img')).toHaveAttribute('src', 'blob:/d/cat.jpg');
   });
@@ -69,14 +89,14 @@ describe('SearchResults', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.mocked(loadImageUrl).mockRejectedValue(new Error('not found'));
 
-    renderResults();
+    render(<SearchResults search={searchWith()} />);
 
     expect(await screen.findAllByText("Couldn't load image")).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Preview cat.jpg' })).toBeDisabled();
   });
 
   it('shows a fallback when the browser cannot decode an image', async () => {
-    renderResults();
+    render(<SearchResults search={searchWith()} />);
     const thumbnail = screen.getByRole('button', { name: 'Preview cat.jpg' });
     await vi.waitFor(() => expect(thumbnail).toBeEnabled());
 
@@ -86,28 +106,82 @@ describe('SearchResults', () => {
     expect(thumbnail).toBeDisabled();
   });
 
+  it('selects the best match first and shows its details', () => {
+    render(<SearchResults search={searchWith()} />);
+
+    expect(pressedRow()).toHaveTextContent('cat.jpg');
+    expect(screen.getByText('#1 of 3')).toBeInTheDocument();
+  });
+
+  it('selects a result when it is clicked', async () => {
+    render(<SearchResults search={searchWith()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /dog\.png/, pressed: false }));
+
+    expect(pressedRow()).toHaveTextContent('pets/dog.png');
+    expect(screen.getByText('#2 of 3')).toBeInTheDocument();
+  });
+
+  it('moves the selection with the arrow keys, within bounds', async () => {
+    render(<SearchResults search={searchWith()} />);
+
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    expect(pressedRow()).toHaveTextContent('dog.png');
+
+    await userEvent.keyboard('{ArrowUp}{ArrowUp}');
+    expect(pressedRow()).toHaveTextContent('cat.jpg');
+  });
+
+  it('ignores the arrow keys while typing in a field', async () => {
+    render(
+      <>
+        <input aria-label="Query" />
+        <SearchResults search={searchWith()} />
+      </>,
+    );
+
+    await userEvent.click(screen.getByLabelText('Query'));
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(pressedRow()).toHaveTextContent('cat.jpg');
+  });
+
+  it('copies the selected result’s full path', async () => {
+    const user = userEvent.setup();
+    render(<SearchResults search={searchWith()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Copy path' }));
+
+    expect(await navigator.clipboard.readText()).toBe('/d/cat.jpg');
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+  });
+
+  it('enlarges the selected result', async () => {
+    render(<SearchResults search={searchWith()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enlarge' }));
+
+    expect(screen.getByRole('dialog', { name: 'cat.jpg' })).toHaveAttribute('open');
+  });
+
   it('opens the full-size image in a dialog when a thumbnail is clicked', async () => {
-    renderResults();
-    const thumbnail = screen.getByRole('button', { name: 'Preview cat.jpg' });
-    await vi.waitFor(() => expect(thumbnail).toBeEnabled());
+    render(<SearchResults search={searchWith()} />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-    await userEvent.click(thumbnail);
+    const dialog = await openPreview('pets/dog.png');
 
-    const dialog = screen.getByRole('dialog', { name: 'cat.jpg' });
+    expect(dialog).toHaveAccessibleName('pets/dog.png');
     expect(dialog).toHaveAttribute('open');
-    expect(within(dialog).getByRole('img', { name: 'cat.jpg' })).toHaveAttribute(
+    expect(await within(dialog).findByRole('img', { name: 'pets/dog.png' })).toHaveAttribute(
       'src',
-      'blob:/d/cat.jpg',
+      'blob:/d/pets/dog.png',
     );
-    expect(within(dialog).getByText('Score: 0.31235')).toBeInTheDocument();
+    expect(within(dialog).getByText('0.25000')).toBeInTheDocument();
   });
 
   it('closes the dialog with the close button', async () => {
-    renderResults();
-    const thumbnail = screen.getByRole('button', { name: 'Preview dog.png' });
-    await vi.waitFor(() => expect(thumbnail).toBeEnabled());
-    await userEvent.click(thumbnail);
+    render(<SearchResults search={searchWith()} />);
+    await openPreview('cat.jpg');
 
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
 
@@ -115,13 +189,10 @@ describe('SearchResults', () => {
   });
 
   it('closes the dialog when the backdrop is clicked, but not the image', async () => {
-    renderResults();
-    const thumbnail = screen.getByRole('button', { name: 'Preview cat.jpg' });
-    await vi.waitFor(() => expect(thumbnail).toBeEnabled());
-    await userEvent.click(thumbnail);
-    const dialog = screen.getByRole('dialog');
+    render(<SearchResults search={searchWith()} />);
+    const dialog = await openPreview('cat.jpg');
 
-    await userEvent.click(within(dialog).getByRole('img'));
+    await userEvent.click(await within(dialog).findByRole('img'));
     expect(dialog).toBeInTheDocument();
 
     // Clicks on the ::backdrop are dispatched to the dialog element itself
@@ -130,13 +201,22 @@ describe('SearchResults', () => {
   });
 
   it('closes the dialog when the browser closes it, e.g. with Escape', async () => {
-    renderResults();
-    const thumbnail = screen.getByRole('button', { name: 'Preview cat.jpg' });
-    await vi.waitFor(() => expect(thumbnail).toBeEnabled());
-    await userEvent.click(thumbnail);
+    render(<SearchResults search={searchWith()} />);
+    const dialog = await openPreview('cat.jpg');
 
-    screen.getByRole<HTMLDialogElement>('dialog').close();
+    (dialog as HTMLDialogElement).close();
 
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('leaves the selection alone while the dialog is open', async () => {
+    render(<SearchResults search={searchWith()} />);
+    await openPreview('cat.jpg');
+
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(screen.getByRole('button', { pressed: true, hidden: true })).toHaveTextContent(
+      'cat.jpg',
+    );
   });
 });

@@ -15,7 +15,7 @@ type SearchState = { started: boolean; done: boolean };
 type E2EWindow = Window & { __e2eSearch?: SearchState };
 
 async function search(query: string) {
-  const input = await $('input[placeholder="Query"]');
+  const input = await $('input[placeholder="describe an image…"]');
   await input.clearValue();
   await input.setValue(query);
   await expect(input).toHaveValue(query);
@@ -24,7 +24,7 @@ async function search(query: string) {
   // disabled and re-enabled, so results from the previous search aren't
   // mistaken for this one's.
   await browser.execute(() => {
-    const button = document.querySelector<HTMLButtonElement>('button[aria-label="Search"]')!;
+    const button = document.querySelector<HTMLButtonElement>('button[aria-label="Look"]')!;
     const state: SearchState = { started: false, done: false };
     (window as E2EWindow).__e2eSearch = state;
 
@@ -38,7 +38,7 @@ async function search(query: string) {
     }).observe(button, { attributes: true, attributeFilter: ['disabled'] });
   });
 
-  await $('button[aria-label="Search"]').click();
+  await $('button[aria-label="Look"]').click();
 
   await browser.waitUntil(
     () => browser.execute(() => (window as E2EWindow).__e2eSearch?.done ?? false),
@@ -58,9 +58,9 @@ describe('image search', () => {
     await browser.execute((dir) => localStorage.setItem('directory', dir), imagesDir);
     await browser.refresh();
 
-    await expect($(`p=Selected: ${imagesDir}`)).toBeDisplayed();
+    await expect($(`p[title="${imagesDir}"]`)).toBeDisplayed();
     // Searching stays disabled until the model has downloaded and is ready
-    await browser.waitUntil(() => $('button[aria-label="Search"]').isEnabled(), {
+    await browser.waitUntil(() => $('button[aria-label="Look"]').isEnabled(), {
       timeout: 10 * 60_000,
       interval: 1_000,
       timeoutMsg: 'The CLIP model did not finish loading',
@@ -73,7 +73,9 @@ describe('image search', () => {
 
       expect(results).toHaveLength(expectedMatches.length);
       expect(results[0]).toBe(fileName);
-      await expect($(`p=Files processed: ${expectedMatches.length}`)).toBeDisplayed();
+      await expect($('footer')).toHaveText(`Files processed ${expectedMatches.length}`, {
+        containing: true,
+      });
     });
   }
 

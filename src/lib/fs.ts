@@ -5,6 +5,7 @@ export interface DirEntry {
   name: string;
   path: string;
   isFile: boolean;
+  isSymlink: boolean;
 }
 
 export async function openDirectory(): Promise<string | null> {

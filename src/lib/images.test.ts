@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { RawImage } from '@huggingface/transformers';
 import type { DirEntry } from './fs';
-import { loadImageUrl, loadImagesFromDir } from './images';
+import { listImageFiles, loadImage, loadImageUrl } from './images';
 
 vi.mock('@huggingface/transformers', () => ({
   RawImage: { fromBlob: vi.fn() },
@@ -10,95 +10,136 @@ vi.mock('@huggingface/transformers', () => ({
 
 const fromBlob = vi.mocked(RawImage.fromBlob);
 
-function mockFs(entries: DirEntry[]) {
-  const readFile = vi.fn((path: string) => new TextEncoder().encode(path).buffer);
-  mockIPC((cmd, args) => {
-    if (cmd === 'read_directory') return entries;
-    if (cmd === 'read_file') return readFile((args as { filePath: string }).filePath);
-  });
-  return { readFile };
+function file(path: string): DirEntry {
+  return { name: path.slice(path.lastIndexOf('/') + 1), path, isFile: true, isSymlink: false };
 }
 
-describe('loadImagesFromDir', () => {
+function dir(path: string, isSymlink = false): DirEntry {
+  return { name: path.slice(path.lastIndexOf('/') + 1), path, isFile: false, isSymlink };
+}
+
+// Fakes a directory tree; reading a file returns its path as the contents
+function mockFs(tree: Record<string, DirEntry[]>) {
+  const readDirectory = vi.fn((path: string) => {
+    if (!(path in tree)) throw new Error(`no such directory: ${path}`);
+    return tree[path];
+  });
+  mockIPC((cmd, args) => {
+    if (cmd === 'read_directory') {
+      return readDirectory((args as { directoryPath: string }).directoryPath);
+    }
+    if (cmd === 'read_file') {
+      return new TextEncoder().encode((args as { filePath: string }).filePath).buffer;
+    }
+  });
+  return { readDirectory };
+}
+
+describe('listImageFiles', () => {
+  it('only lists image files', async () => {
+    mockFs({
+      '/d': [
+        file('/d/cat.jpg'),
+        file('/d/DOG.PNG'),
+        file('/d/notes.txt'),
+        file('/d/README'),
+        dir('/d/album.jpg'),
+      ],
+    });
+
+    await expect(listImageFiles('/d')).resolves.toEqual([
+      { name: 'cat.jpg', path: '/d/cat.jpg' },
+      { name: 'DOG.PNG', path: '/d/DOG.PNG' },
+    ]);
+  });
+
+  it('ignores subdirectories unless asked to include them', async () => {
+    const { readDirectory } = mockFs({
+      '/d': [file('/d/a.png'), dir('/d/sub')],
+      '/d/sub': [file('/d/sub/b.png')],
+    });
+
+    await expect(listImageFiles('/d')).resolves.toEqual([{ name: 'a.png', path: '/d/a.png' }]);
+    expect(readDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists subdirectories after their parent, with relative names', async () => {
+    mockFs({
+      '/d': [dir('/d/animals'), file('/d/z.png')],
+      '/d/animals': [dir('/d/animals/big-cats'), file('/d/animals/cat.jpg')],
+      '/d/animals/big-cats': [file('/d/animals/big-cats/lion.webp')],
+    });
+
+    await expect(listImageFiles('/d', true)).resolves.toEqual([
+      { name: 'z.png', path: '/d/z.png' },
+      { name: 'animals/cat.jpg', path: '/d/animals/cat.jpg' },
+      { name: 'animals/big-cats/lion.webp', path: '/d/animals/big-cats/lion.webp' },
+    ]);
+  });
+
+  it('skips hidden and symlinked directories', async () => {
+    const { readDirectory } = mockFs({
+      '/d': [dir('/d/.cache'), dir('/d/loop', true), file('/d/a.png')],
+    });
+
+    await expect(listImageFiles('/d', true)).resolves.toEqual([
+      { name: 'a.png', path: '/d/a.png' },
+    ]);
+    expect(readDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips subdirectories that cannot be read', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockFs({ '/d': [dir('/d/locked'), file('/d/a.png')] });
+
+    await expect(listImageFiles('/d', true)).resolves.toEqual([
+      { name: 'a.png', path: '/d/a.png' },
+    ]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('/d/locked'), expect.any(Error));
+  });
+
+  it('fails when the directory itself cannot be read', async () => {
+    mockFs({});
+
+    await expect(listImageFiles('/missing', true)).rejects.toThrow('/missing');
+  });
+});
+
+describe('loadImage', () => {
   beforeEach(() => {
     fromBlob.mockReset();
     fromBlob.mockImplementation(async (blob) => ({ blob }) as unknown as RawImage);
   });
 
-  it('only loads image files', async () => {
-    const { readFile } = mockFs([
-      { name: 'cat.jpg', path: '/d/cat.jpg', isFile: true },
-      { name: 'DOG.PNG', path: '/d/DOG.PNG', isFile: true },
-      { name: 'notes.txt', path: '/d/notes.txt', isFile: true },
-      { name: 'README', path: '/d/README', isFile: true },
-      { name: 'album.jpg', path: '/d/album.jpg', isFile: false },
-    ]);
+  it('decodes the file contents with the MIME type for the extension', async () => {
+    mockFs({});
 
-    const images = await loadImagesFromDir('/d');
+    for (const path of ['/d/a.jpeg', '/d/b.png', '/d/c.gif', '/d/d.webp', '/d/e.bmp']) {
+      await loadImage(path);
+    }
 
-    expect(images.map(({ fileName, path }) => ({ fileName, path }))).toEqual([
-      { fileName: 'cat.jpg', path: '/d/cat.jpg' },
-      { fileName: 'DOG.PNG', path: '/d/DOG.PNG' },
-    ]);
-    expect(readFile).toHaveBeenCalledTimes(2);
-  });
-
-  it('creates blobs with the MIME type for the extension', async () => {
-    mockFs([
-      { name: 'a.jpeg', path: '/d/a.jpeg', isFile: true },
-      { name: 'b.png', path: '/d/b.png', isFile: true },
-      { name: 'c.gif', path: '/d/c.gif', isFile: true },
-      { name: 'd.webp', path: '/d/d.webp', isFile: true },
-      { name: 'e.bmp', path: '/d/e.bmp', isFile: true },
-    ]);
-
-    await loadImagesFromDir('/d');
-
-    expect(fromBlob.mock.calls.map(([blob]) => blob.type)).toEqual([
+    const blobs = fromBlob.mock.calls.map(([blob]) => blob);
+    expect(blobs.map((blob) => blob.type)).toEqual([
       'image/jpeg',
       'image/png',
       'image/gif',
       'image/webp',
       'image/bmp',
     ]);
+    expect(await blobs[1].text()).toBe('/d/b.png');
   });
 
-  it('passes the file contents to the decoder', async () => {
-    mockFs([{ name: 'a.png', path: '/d/a.png', isFile: true }]);
-
-    await loadImagesFromDir('/d');
-
-    const blob = fromBlob.mock.calls[0][0];
-    expect(await blob.text()).toBe('/d/a.png');
-  });
-
-  it('skips images that cannot be decoded', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mockFs([
-      { name: 'broken.jpg', path: '/d/broken.jpg', isFile: true },
-      { name: 'ok.jpg', path: '/d/ok.jpg', isFile: true },
-    ]);
+  it('rejects when the image cannot be decoded', async () => {
+    mockFs({});
     fromBlob.mockRejectedValueOnce(new Error('bad data'));
 
-    const images = await loadImagesFromDir('/d');
-
-    expect(images.map((i) => i.fileName)).toEqual(['ok.jpg']);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('broken.jpg'),
-      expect.any(Error),
-    );
-  });
-
-  it('returns an empty list for an empty directory', async () => {
-    mockFs([]);
-
-    await expect(loadImagesFromDir('/d')).resolves.toEqual([]);
+    await expect(loadImage('/d/broken.jpg')).rejects.toThrow('bad data');
   });
 });
 
 describe('loadImageUrl', () => {
   it('creates an object URL for the file contents with its MIME type', async () => {
-    mockFs([]);
+    mockFs({});
     const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cat');
 
     await expect(loadImageUrl('/d/cat.webp')).resolves.toBe('blob:cat');

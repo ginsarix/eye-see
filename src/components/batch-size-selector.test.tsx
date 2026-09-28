@@ -1,55 +1,47 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { createStore } from 'jotai';
-import { batchSizeAtom, batchSizeFieldInvalidAtom } from '../atoms/batch-size';
+import { batchSizeAtom } from '../atoms/batch-size';
 import { renderWithStore } from '../test/utils';
 import { BatchSizeSelector } from './batch-size-selector';
 
 describe('BatchSizeSelector', () => {
-  it('shows the current batch size', () => {
+  it('offers the batch sizes with the current one checked', () => {
     renderWithStore(<BatchSizeSelector />);
 
-    expect(screen.getByLabelText('Batch Size')).toHaveValue('8');
+    const group = screen.getByRole('radiogroup', { name: 'Batch size' });
+    expect(group).toBeInTheDocument();
+    expect(screen.getAllByRole('radio').map((radio) => radio.getAttribute('value'))).toEqual([
+      '1',
+      '2',
+      '4',
+      '8',
+      '16',
+      '32',
+    ]);
+    expect(screen.getByRole('radio', { name: '8' })).toBeChecked();
   });
 
-  it('updates the batch size as the user types', async () => {
+  it('updates the batch size when another is picked', async () => {
     const { store } = renderWithStore(<BatchSizeSelector />);
-    const input = screen.getByLabelText('Batch Size');
 
-    await userEvent.clear(input);
-    await userEvent.type(input, '16');
+    await userEvent.click(screen.getByText('16'));
 
     expect(store.get(batchSizeAtom)).toBe(16);
-    expect(input).toHaveValue('16');
+    expect(screen.getByRole('radio', { name: '16' })).toBeChecked();
   });
 
-  it('ignores non-numeric input', async () => {
-    const { store } = renderWithStore(<BatchSizeSelector />);
+  it('explains batching before any search', () => {
+    renderWithStore(<BatchSizeSelector />);
 
-    await userEvent.type(screen.getByLabelText('Batch Size'), 'x');
-
-    expect(store.get(batchSizeAtom)).toBe(8);
+    expect(screen.getByText('Images are embedded 8 at a time')).toBeInTheDocument();
   });
 
-  it('shows an error when the field is invalid', () => {
-    const store = createStore();
-    store.set(batchSizeFieldInvalidAtom, true);
-    renderWithStore(<BatchSizeSelector />, store);
+  it('previews how the last search’s files split into batches', async () => {
+    renderWithStore(<BatchSizeSelector fileCount={9} />);
+    expect(screen.getByText('9 files → 2 batches of 8')).toBeInTheDocument();
 
-    expect(screen.getByLabelText('Batch Size')).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText('Batch size can not be less than 1')).toBeInTheDocument();
-  });
-
-  it('clears the error once a valid size is entered', async () => {
-    const store = createStore();
-    store.set(batchSizeAtom, 0);
-    store.set(batchSizeFieldInvalidAtom, true);
-    renderWithStore(<BatchSizeSelector />, store);
-
-    await userEvent.type(screen.getByLabelText('Batch Size'), '4');
-
-    expect(store.get(batchSizeFieldInvalidAtom)).toBe(false);
-    expect(screen.queryByText('Batch size can not be less than 1')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('16'));
+    expect(screen.getByText('9 files → 1 batch of 16')).toBeInTheDocument();
   });
 });
