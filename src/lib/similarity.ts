@@ -1,6 +1,6 @@
 import { cos_sim } from '@huggingface/transformers';
-import { model, waitModelLoad } from '../constants/model';
-import { loadImagesFromDir } from './image';
+import { model, waitModelLoad } from './clip';
+import { loadImagesFromDir } from './images';
 
 export interface SimilarityMatch {
   fileName: string;

@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
-import App from './App';
-import { initColorMode } from './components/color-mode-button';
-import { loadModel } from './constants/model';
+import App from './app';
+import { initColorMode } from './lib/color-mode';
+import { loadModel } from './lib/clip';
 import './index.css';
 
 initColorMode();

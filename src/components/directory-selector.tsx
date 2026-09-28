@@ -1,8 +1,8 @@
 import { useAtom } from 'jotai';
 import { useEffect } from 'react';
 import { directoryAtom, directoryFieldInvalidAtom } from '../atoms/directory';
-import { openDirectory } from '../api/fs';
-import { Button } from './button';
+import { openDirectory } from '../lib/fs';
+import { Button } from './ui/button';
 
 export function DirectorySelector() {
   const [directory, setDirectory] = useAtom(directoryAtom);

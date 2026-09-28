@@ -1,33 +1,14 @@
 import { useState } from 'react';
 import { LuMoon, LuSun } from 'react-icons/lu';
-
-type ColorMode = 'light' | 'dark';
-
-const STORAGE_KEY = 'theme';
-
-function getInitialColorMode(): ColorMode {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function applyColorMode(colorMode: ColorMode) {
-  document.documentElement.classList.toggle('dark', colorMode === 'dark');
-}
-
-// Call before the first render to avoid a flash of the wrong theme
-export function initColorMode() {
-  applyColorMode(getInitialColorMode());
-}
+import { type ColorMode, getInitialColorMode, setColorMode } from '../lib/color-mode';
 
 export function ColorModeButton() {
-  const [colorMode, setColorMode] = useState<ColorMode>(getInitialColorMode);
+  const [colorMode, setColorModeState] = useState<ColorMode>(getInitialColorMode);
 
   const toggleColorMode = () => {
     const next = colorMode === 'dark' ? 'light' : 'dark';
-    localStorage.setItem(STORAGE_KEY, next);
-    applyColorMode(next);
     setColorMode(next);
+    setColorModeState(next);
   };
 
   return (

@@ -1,5 +1,5 @@
 import { RawImage } from '@huggingface/transformers';
-import { readDirectory, readFile } from '../api/fs';
+import { readDirectory, readFile } from './fs';
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
 
