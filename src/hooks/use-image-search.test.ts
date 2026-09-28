@@ -1,8 +1,12 @@
 import { act, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from 'jotai';
-import { directoryAtom, directoryFieldInvalidAtom } from '../atoms/directory';
-import { batchSizeAtom, batchSizeFieldInvalidAtom } from '../atoms/batch-size';
+import {
+  directoryAtom,
+  directoryFieldInvalidAtom,
+  includeSubdirectoriesAtom,
+} from '../atoms/directory';
+import { batchSizeAtom } from '../atoms/batch-size';
 import {
   getSimilarImages,
   type SimilarityFinalResult,
@@ -13,13 +17,23 @@ import { useImageSearch } from './use-image-search';
 
 vi.mock('../lib/similarity', () => ({ getSimilarImages: vi.fn() }));
 
+const files = ['cat.jpg', 'sub/dog.png'];
+
 const finalResult: SimilarityFinalResult = {
   results: [{ fileName: 'cat.jpg', path: '/photos/cat.jpg', score: 0.9 }],
   filesProcessed: 2,
+  files,
 };
 
 function mockSearch(generator: () => AsyncGenerator<SimilarityProgress, SimilarityFinalResult>) {
   vi.mocked(getSimilarImages).mockImplementation(generator);
+}
+
+function mockInstantSearch() {
+  mockSearch(async function* () {
+    yield { filesProcessed: 0, files };
+    return finalResult;
+  });
 }
 
 function storeWith(directory: string | null, batchSize = 8) {
@@ -41,38 +55,49 @@ describe('useImageSearch', () => {
 
     expect(store.get(directoryFieldInvalidAtom)).toBe(true);
     expect(getSimilarImages).not.toHaveBeenCalled();
-    expect(result.current.loadState).toBeNull();
+    expect(result.current.current).toBeNull();
   });
 
-  it('flags the batch size field when it is less than 1', async () => {
-    const { result, store } = renderHookWithStore(() => useImageSearch(), storeWith('/d', 0));
+  it('ignores blank queries', async () => {
+    const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d'));
 
-    await act(() => result.current.search('cat'));
+    await act(() => result.current.search('   '));
 
-    expect(store.get(batchSizeFieldInvalidAtom)).toBe(true);
     expect(getSimilarImages).not.toHaveBeenCalled();
+    expect(result.current.history).toEqual([]);
   });
 
   it('searches the selected directory and returns the results', async () => {
     mockSearch(async function* () {
-      yield { filesProcessed: 1 };
-      yield { filesProcessed: 2 };
+      yield { filesProcessed: 0, files };
+      yield { filesProcessed: 2, files };
       return finalResult;
     });
-    const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d', 4));
+    const store = storeWith('/d', 4);
+    store.set(includeSubdirectoriesAtom, true);
+    const { result } = renderHookWithStore(() => useImageSearch(), store);
 
-    await act(() => result.current.search('cat'));
+    await act(() => result.current.search('  cat  '));
 
-    expect(getSimilarImages).toHaveBeenCalledWith('cat', '/d', 4);
-    expect(result.current.results).toEqual(finalResult);
-    expect(result.current.loadState).toEqual({ loading: false, filesProcessed: 2 });
+    expect(getSimilarImages).toHaveBeenCalledWith('cat', '/d', 4, true);
+    expect(result.current.current).toEqual({
+      id: 1,
+      query: 'cat',
+      batchSize: 4,
+      status: 'done',
+      files,
+      filesProcessed: 2,
+      results: finalResult.results,
+      elapsedMs: expect.any(Number),
+    });
+    expect(result.current.searching).toBe(false);
   });
 
-  it('reports progress while searching', async () => {
+  it('reports progress while searching and ignores searches until it finishes', async () => {
     let finish!: () => void;
     const finished = new Promise<void>((resolve) => (finish = resolve));
     mockSearch(async function* () {
-      yield { filesProcessed: 3 };
+      yield { filesProcessed: 1, files };
       await finished;
       return finalResult;
     });
@@ -83,20 +108,45 @@ describe('useImageSearch', () => {
       search = result.current.search('cat');
     });
 
-    await waitFor(() =>
-      expect(result.current.loadState).toEqual({ loading: true, filesProcessed: 3 }),
-    );
+    await waitFor(() => expect(result.current.current?.filesProcessed).toBe(1));
+    expect(result.current.current).toMatchObject({ status: 'searching', files, elapsedMs: null });
+    expect(result.current.searching).toBe(true);
+
+    await act(() => result.current.search('dog'));
+    expect(getSimilarImages).toHaveBeenCalledTimes(1);
 
     finish();
     await act(() => search);
-    expect(result.current.loadState).toEqual({ loading: false, filesProcessed: 3 });
+    expect(result.current.current?.status).toBe('done');
   });
 
-  it('stops loading and logs when the search fails', async () => {
+  it('keeps the four most recent distinct queries, newest first', async () => {
+    mockInstantSearch();
+    const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d'));
+
+    for (const query of ['a', 'b', 'c', 'a', 'd', 'e']) {
+      await act(() => result.current.search(query));
+    }
+
+    expect(result.current.history).toEqual(['e', 'd', 'a', 'c']);
+  });
+
+  it('gives each search a new id', async () => {
+    mockInstantSearch();
+    const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d'));
+
+    await act(() => result.current.search('a'));
+    const firstId = result.current.current?.id;
+    await act(() => result.current.search('b'));
+
+    expect(result.current.current?.id).not.toBe(firstId);
+  });
+
+  it('marks the search as failed and logs when it throws', async () => {
     const error = new Error('boom');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mockSearch(async function* () {
-      yield { filesProcessed: 1 };
+      yield { filesProcessed: 1, files };
       throw error;
     });
     const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d'));
@@ -104,7 +154,11 @@ describe('useImageSearch', () => {
     await act(() => result.current.search('cat'));
 
     expect(consoleError).toHaveBeenCalledWith(error);
-    expect(result.current.results).toBeUndefined();
-    expect(result.current.loadState).toEqual({ loading: false, filesProcessed: 1 });
+    expect(result.current.current).toMatchObject({
+      status: 'error',
+      filesProcessed: 1,
+      results: [],
+    });
+    expect(result.current.searching).toBe(false);
   });
 });

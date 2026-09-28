@@ -1,16 +1,20 @@
-import { useEffect, useId, useRef } from 'react';
-import { LuX } from 'react-icons/lu';
+import { useEffect, useId, useRef, useState } from 'react';
+import { LuImageOff, LuX } from 'react-icons/lu';
+import { useImageUrl } from '../hooks/use-image-url';
+import { splitRelativePath } from '../lib/paths';
 import type { SimilarityMatch } from '../lib/similarity';
 
 type ImagePreviewDialogProps = {
   match: SimilarityMatch;
-  url: string;
   onClose: () => void;
 };
 
-export function ImagePreviewDialog({ match, url, onClose }: ImagePreviewDialogProps) {
+export function ImagePreviewDialog({ match, onClose }: ImagePreviewDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const image = useImageUrl(match.path);
+  const [decodeFailed, setDecodeFailed] = useState(false);
+  const { dir, base } = splitRelativePath(match.fileName);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -27,30 +31,49 @@ export function ImagePreviewDialog({ match, url, onClose }: ImagePreviewDialogPr
         // Clicks on the ::backdrop target the dialog itself; its content fills the rest
         if (e.target === e.currentTarget) e.currentTarget.close();
       }}
-      className="m-auto max-h-[90vh] max-w-[90vw] bg-transparent p-0 text-inherit backdrop:bg-black/80"
+      className="m-auto max-h-[90vh] max-w-[90vw] bg-transparent p-0 text-ink backdrop:bg-black/80 backdrop:backdrop-blur-sm"
     >
-      <div className="flex flex-col gap-3 rounded-lg bg-white p-4 dark:bg-zinc-900">
-        <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 rounded-2xl border border-line-strong bg-raised p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-6">
           <div className="min-w-0">
-            <h2 id={titleId} className="truncate font-medium">
-              {match.fileName}
+            <h2
+              id={titleId}
+              className="truncate text-xl font-extrabold tracking-[-0.02em]"
+              title={match.fileName}
+            >
+              {dir && <span className="font-light text-muted">{dir}</span>}
+              {base}
             </h2>
-            <p className="text-sm text-zinc-500">Score: {match.score.toPrecision(5)}</p>
+            <p className="font-mono text-sm text-accent-ink">{match.score.toFixed(5)}</p>
           </div>
           <button
             type="button"
             aria-label="Close"
             onClick={() => dialogRef.current?.close()}
-            className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-blue-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+            className="cursor-pointer rounded-full border border-line-strong p-1.5 text-muted transition-colors hover:border-ink hover:text-ink"
           >
-            <LuX className="size-5" />
+            <LuX className="size-4" />
           </button>
         </div>
-        <img
-          src={url}
-          alt={match.fileName}
-          className="mx-auto max-h-[calc(90vh-6rem)] max-w-full object-contain"
-        />
+        {image.status === 'ready' && !decodeFailed ? (
+          <img
+            src={image.url}
+            alt={match.fileName}
+            onError={() => setDecodeFailed(true)}
+            className="mx-auto max-h-[calc(90vh-7rem)] max-w-full rounded-lg object-contain"
+          />
+        ) : (
+          <div className="hatched flex h-64 w-96 max-w-full items-center justify-center gap-2 rounded-lg font-mono text-xs text-muted">
+            {image.status === 'loading' ? (
+              'Loading…'
+            ) : (
+              <>
+                <LuImageOff aria-hidden className="size-4" />
+                Couldn't load image
+              </>
+            )}
+          </div>
+        )}
       </div>
     </dialog>
   );

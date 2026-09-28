@@ -1,38 +1,50 @@
 import { useId } from 'react';
 import { useAtom } from 'jotai';
-import { batchSizeAtom, batchSizeFieldInvalidAtom } from '../atoms/batch-size';
+import { BATCH_SIZES, batchSizeAtom } from '../atoms/batch-size';
 
-export function BatchSizeSelector() {
-  const [selectedBatchSize, setSelectedBatchSize] = useAtom(batchSizeAtom);
-  const [batchSizeFieldInvalid, setBatchSizeFieldInvalid] = useAtom(batchSizeFieldInvalidAtom);
-  const id = useId();
+type BatchSizeSelectorProps = {
+  // Number of images in the last search, to preview how they would be split
+  fileCount?: number;
+};
+
+function describeBatches(fileCount: number | undefined, batchSize: number) {
+  if (!fileCount) return `Images are embedded ${batchSize} at a time`;
+  const batches = Math.ceil(fileCount / batchSize);
+  return `${fileCount} ${fileCount === 1 ? 'file' : 'files'} → ${batches} ${batches === 1 ? 'batch' : 'batches'} of ${batchSize}`;
+}
+
+export function BatchSizeSelector({ fileCount }: BatchSizeSelectorProps) {
+  const [batchSize, setBatchSize] = useAtom(batchSizeAtom);
+  const labelId = useId();
 
   return (
-    <div className="mt-3 flex w-1/2 flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
-        Batch Size
-      </label>
-      <input
-        id={id}
-        required
-        inputMode="numeric"
-        pattern="[0-9]"
-        aria-invalid={batchSizeFieldInvalid}
-        value={String(selectedBatchSize)}
-        onInput={(e) => {
-          const v = Number(e.currentTarget.value);
-          if (Number.isNaN(v)) return;
-
-          setSelectedBatchSize(v);
-          if (v >= 1) {
-            setBatchSizeFieldInvalid(false);
-          }
-        }}
-        className="h-10 w-full rounded-md border border-transparent bg-zinc-100 px-3 outline-none focus-visible:border-blue-600 focus-visible:ring-1 focus-visible:ring-blue-600 aria-invalid:border-red-500 aria-invalid:ring-1 aria-invalid:ring-red-500 dark:bg-zinc-800"
-      />
-      {batchSizeFieldInvalid && (
-        <p className="text-xs text-red-500">Batch size can not be less than 1</p>
-      )}
-    </div>
+    <section className="flex flex-col gap-3.5">
+      <div className="flex items-baseline justify-between">
+        <h2 id={labelId} className="eyebrow">
+          Batch size
+        </h2>
+        <span aria-hidden className="text-[34px] font-extrabold tracking-[-0.02em]">
+          {batchSize}
+        </span>
+      </div>
+      <div role="radiogroup" aria-labelledby={labelId} className="grid grid-cols-6 gap-1">
+        {BATCH_SIZES.map((size) => (
+          <label key={size}>
+            <input
+              type="radio"
+              name="batch-size"
+              value={size}
+              checked={size === batchSize}
+              onChange={() => setBatchSize(size)}
+              className="peer sr-only"
+            />
+            <span className="flex h-10 cursor-pointer items-center justify-center rounded-lg border border-line-strong/60 font-mono text-[13px] transition-colors peer-checked:border-ink peer-checked:bg-ink peer-checked:text-canvas peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent-ink hover:border-ink">
+              {size}
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="font-mono text-xs text-muted">{describeBatches(fileCount, batchSize)}</p>
+    </section>
   );
 }

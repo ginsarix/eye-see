@@ -1,38 +1,99 @@
-import { useState } from 'react';
-import type { SearchLoadState } from '../hooks/use-image-search';
-import type { SimilarityFinalResult, SimilarityMatch } from '../lib/similarity';
+import { useEffect, useState } from 'react';
+import type { ImageSearch } from '../hooks/use-image-search';
+import type { SimilarityMatch } from '../lib/similarity';
 import { ImagePreviewDialog } from './image-preview-dialog';
-import { ResultThumbnail } from './result-thumbnail';
+import { Iris } from './iris';
+import { RankedList } from './ranked-list';
+import { SelectedMatch } from './selected-match';
 
-type SearchResultsProps = {
-  loadState: SearchLoadState | null;
-  results?: SimilarityFinalResult;
-};
+function isTextInput(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+  );
+}
 
-export function SearchResults({ loadState, results }: SearchResultsProps) {
-  const [preview, setPreview] = useState<{ match: SimilarityMatch; url: string } | null>(null);
+// Render with `key={search?.id}` so the selection resets for each search
+export function SearchResults({ search }: { search: ImageSearch | null }) {
+  const [selected, setSelected] = useState(0);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [movedByKeyboard, setMovedByKeyboard] = useState(false);
+  const [preview, setPreview] = useState<SimilarityMatch | null>(null);
+
+  const results = search?.status === 'done' ? search.results : [];
+  const focusIndex = results.length > 0 ? (hovered ?? selected) : null;
+  const selectedMatch = results[selected];
+
+  useEffect(() => {
+    if (results.length === 0 || preview) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || isTextInput(e.target)) {
+        return;
+      }
+      const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+      if (!step) return;
+
+      e.preventDefault();
+      setSelected((index) => Math.min(results.length - 1, Math.max(0, index + step)));
+      setMovedByKeyboard(true);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [results.length, preview]);
+
+  const select = (index: number) => {
+    setSelected(index);
+    setMovedByKeyboard(false);
+  };
+
+  const phaseLabel =
+    search?.status === 'searching'
+      ? 'Looking…'
+      : search?.status === 'done'
+        ? `"${search.query}"`
+        : '';
 
   return (
     <>
-      {loadState?.filesProcessed && <p>Files processed: {loadState.filesProcessed}</p>}
-
-      {results && results.results.length > 0 && (
-        <ul aria-label="Search results" className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {results.results.map((match) => (
-            <li key={match.path}>
-              <ResultThumbnail match={match} onOpen={(url) => setPreview({ match, url })} />
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {preview && (
-        <ImagePreviewDialog
-          match={preview.match}
-          url={preview.url}
-          onClose={() => setPreview(null)}
+      <section
+        aria-label="Iris"
+        className="flex max-w-full flex-[1.5_1_440px] flex-col items-center gap-6 bg-canvas p-7"
+      >
+        <div className="flex gap-4 self-stretch justify-between">
+          <span className="eyebrow">Iris · closer is better</span>
+          <span className="eyebrow truncate">{phaseLabel}</span>
+        </div>
+        <Iris
+          search={search}
+          focusIndex={focusIndex}
+          hoveredIndex={hovered}
+          onSelect={select}
+          onHover={setHovered}
+          onOpen={setPreview}
         />
-      )}
+        {selectedMatch && search && (
+          <SelectedMatch
+            match={selectedMatch}
+            rank={selected + 1}
+            total={search.files.length}
+            onOpen={() => setPreview(selectedMatch)}
+          />
+        )}
+      </section>
+
+      <RankedList
+        search={search}
+        focusIndex={focusIndex}
+        selectedIndex={selected}
+        scrollToSelected={movedByKeyboard}
+        onSelect={select}
+        onHover={setHovered}
+        onOpen={setPreview}
+      />
+
+      {preview && <ImagePreviewDialog match={preview} onClose={() => setPreview(null)} />}
     </>
   );
 }

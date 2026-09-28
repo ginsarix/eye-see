@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RawImage } from '@huggingface/transformers';
-import { loadImagesFromDir } from './images';
+import { listImageFiles, loadImage } from './images';
 import { getSimilarImages } from './similarity';
 
 const clip = vi.hoisted(() => ({ model: undefined as unknown }));
@@ -12,7 +12,7 @@ vi.mock('./clip', () => ({
   waitModelLoad: vi.fn(async () => undefined),
 }));
 
-vi.mock('./images', () => ({ loadImagesFromDir: vi.fn() }));
+vi.mock('./images', () => ({ listImageFiles: vi.fn(), loadImage: vi.fn() }));
 
 // Each fake image embedding is just [score], so cos_sim can read it back directly
 vi.mock('@huggingface/transformers', () => ({
@@ -31,14 +31,16 @@ function createFakeModel() {
   return { tokenizer, processor, model };
 }
 
+// Scores of NaN make the fake decoder fail for that file
 function mockImages(scores: Record<string, number>) {
-  vi.mocked(loadImagesFromDir).mockResolvedValue(
-    Object.entries(scores).map(([fileName, score]) => ({
-      fileName,
-      path: `/d/${fileName}`,
-      image: { score } as unknown as RawImage,
-    })),
+  vi.mocked(listImageFiles).mockResolvedValue(
+    Object.keys(scores).map((name) => ({ name, path: `/d/${name}` })),
   );
+  vi.mocked(loadImage).mockImplementation(async (path) => {
+    const score = scores[path.slice('/d/'.length)];
+    if (Number.isNaN(score)) throw new Error('bad data');
+    return { score } as unknown as RawImage;
+  });
 }
 
 async function collect<T, R>(generator: AsyncGenerator<T, R>) {
@@ -54,7 +56,8 @@ describe('getSimilarImages', () => {
   let fakeModel: ReturnType<typeof createFakeModel>;
 
   beforeEach(() => {
-    vi.mocked(loadImagesFromDir).mockReset();
+    vi.mocked(listImageFiles).mockReset();
+    vi.mocked(loadImage).mockReset();
     fakeModel = createFakeModel();
     clip.model = fakeModel;
   });
@@ -65,8 +68,8 @@ describe('getSimilarImages', () => {
     const { yielded, result } = await collect(getSimilarImages('cat', '/d', 2));
 
     expect(yielded).toEqual([]);
-    expect(result).toEqual({ results: [], filesProcessed: 0 });
-    expect(loadImagesFromDir).not.toHaveBeenCalled();
+    expect(result).toEqual({ results: [], filesProcessed: 0, files: [] });
+    expect(listImageFiles).not.toHaveBeenCalled();
   });
 
   it('returns no results for a directory without images', async () => {
@@ -74,20 +77,62 @@ describe('getSimilarImages', () => {
 
     const { result } = await collect(getSimilarImages('cat', '/d', 2));
 
-    expect(result).toEqual({ results: [], filesProcessed: 0 });
+    expect(result).toEqual({ results: [], filesProcessed: 0, files: [] });
     expect(fakeModel.model).not.toHaveBeenCalled();
+  });
+
+  it('lists subdirectories only when asked to', async () => {
+    mockImages({ a: 0.1 });
+
+    await collect(getSimilarImages('cat', '/d', 2));
+    await collect(getSimilarImages('cat', '/d', 2, true));
+
+    expect(vi.mocked(listImageFiles).mock.calls).toEqual([
+      ['/d', false],
+      ['/d', true],
+    ]);
   });
 
   it('processes images in batches and reports progress', async () => {
     mockImages({ a: 0.1, b: 0.2, c: 0.3, d: 0.4, e: 0.5 });
+    const files = ['a', 'b', 'c', 'd', 'e'];
 
     const { yielded, result } = await collect(getSimilarImages('cat', '/d', 2));
 
-    expect(loadImagesFromDir).toHaveBeenCalledWith('/d');
     expect(fakeModel.tokenizer).toHaveBeenCalledWith(['cat'], { padding: true, truncation: true });
     expect(fakeModel.processor.mock.calls.map(([batch]) => batch.length)).toEqual([2, 2, 1]);
-    expect(yielded).toEqual([{ filesProcessed: 2 }, { filesProcessed: 4 }, { filesProcessed: 5 }]);
+    expect(yielded).toEqual([
+      { filesProcessed: 0, files },
+      { filesProcessed: 2, files },
+      { filesProcessed: 4, files },
+      { filesProcessed: 5, files },
+    ]);
     expect(result.filesProcessed).toBe(5);
+    expect(result.files).toEqual(files);
+  });
+
+  it('decodes each batch just before processing it', async () => {
+    mockImages({ a: 0.1, b: 0.2, c: 0.3 });
+    const generator = getSimilarImages('cat', '/d', 2);
+
+    await generator.next(); // file list
+    expect(loadImage).not.toHaveBeenCalled();
+
+    await generator.next(); // first batch
+    expect(vi.mocked(loadImage).mock.calls).toEqual([['/d/a'], ['/d/b']]);
+  });
+
+  it('skips images that cannot be decoded but still counts them as processed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockImages({ broken: NaN, ok: 0.4, alsoBroken: NaN });
+
+    const { yielded, result } = await collect(getSimilarImages('cat', '/d', 2));
+
+    expect(result.results).toEqual([{ fileName: 'ok', path: '/d/ok', score: 0.4 }]);
+    expect(yielded.at(-1)?.filesProcessed).toBe(3);
+    // The last batch holds only a broken image, so the model isn't run for it
+    expect(fakeModel.model).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('broken'), expect.any(Error));
   });
 
   it('returns results sorted by descending score', async () => {
