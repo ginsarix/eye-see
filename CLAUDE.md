@@ -22,7 +22,7 @@ Use `pnpm` (see `packageManager` in `package.json`).
 
 **Frontend (`src/`)**: React 19, jotai, Tailwind CSS v4.
 - `lib/fs.ts` is the only place that talks to Tauri IPC (`invoke` and the dialog plugin).
-- `lib/clip.ts` holds the model as module-level state. `main.tsx` calls `loadModel()` in the background before rendering; `useModelLoading` subscribes to it through `useSyncExternalStore`. It picks WebGPU when an adapter is available and otherwise falls back to WASM.
+- `lib/clip.ts` holds the model as module-level state. `main.tsx` calls `loadModel()` in the background before rendering; `useModelLoadState` subscribes to it through `useSyncExternalStore`. The load state goes `downloading` (with a percentage tracked from the `.onnx` file's `progress_callback` events only) → `preparing` (session creation, which reports no progress) → `idle`. It picks WebGPU when an adapter is available and otherwise falls back to WASM.
 - `lib/similarity.ts` `getSimilarImages` is an async generator: it waits for the model, loads and decodes every image in the directory (`lib/images.ts`), runs CLIP in batches (yielding `{ filesProcessed }` progress after each batch), and returns the top 10 by cosine similarity. Nothing is cached between searches.
 - `hooks/use-image-search.ts` drives the generator and validates inputs. The selected directory and batch size live in jotai atoms (`src/atoms/`) so the selectors and the search hook share them; the last directory is persisted in `localStorage['directory']` and restored on mount by `DirectorySelector`.
 

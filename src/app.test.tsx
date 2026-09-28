@@ -7,8 +7,8 @@ import { renderWithStore } from './test/utils';
 import App from './app';
 
 vi.mock('./lib/clip', () => ({
-  modelLoading: false,
-  subscribeToModelLoading: () => () => undefined,
+  modelLoadState: { status: 'idle' },
+  subscribeToModelLoadState: () => () => undefined,
 }));
 
 vi.mock('./lib/similarity', () => ({ getSimilarImages: vi.fn() }));

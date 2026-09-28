@@ -16,21 +16,49 @@ export let model:
     }
   | undefined;
 
-export let modelLoading = true;
-const loadingListeners: Array<(loading: boolean) => void> = [];
+// `progress` is a whole percentage, or null until the weights start downloading.
+// After the download ONNX Runtime still has to build the session (and compile
+// shaders on WebGPU), which reports no progress, hence the separate phase.
+export type ModelLoadState =
+  | { status: 'downloading'; progress: number | null }
+  | { status: 'preparing' }
+  | { status: 'idle' };
 
-export function subscribeToModelLoading(callback: (loading: boolean) => void) {
-  loadingListeners.push(callback);
-  callback(modelLoading);
+export let modelLoadState: ModelLoadState = { status: 'downloading', progress: null };
+const loadStateListeners: Array<(state: ModelLoadState) => void> = [];
+
+export function subscribeToModelLoadState(callback: (state: ModelLoadState) => void) {
+  loadStateListeners.push(callback);
+  callback(modelLoadState);
   return () => {
-    const index = loadingListeners.indexOf(callback);
-    if (index > -1) loadingListeners.splice(index, 1);
+    const index = loadStateListeners.indexOf(callback);
+    if (index > -1) loadStateListeners.splice(index, 1);
   };
 }
 
-function setModelLoading(loading: boolean) {
-  modelLoading = loading;
-  loadingListeners.forEach((cb) => cb(loading));
+function setModelLoadState(state: ModelLoadState) {
+  modelLoadState = state;
+  loadStateListeners.forEach((cb) => cb(state));
+}
+
+type ProgressInfo = Parameters<
+  NonNullable<NonNullable<Parameters<typeof CLIPModel.from_pretrained>[1]>['progress_callback']>
+>[0];
+
+// Only the .onnx weights are tracked: they are nearly the whole download, and
+// other files' sizes are only known once they start, which would make a summed
+// bar jump backwards.
+function onProgress(info: ProgressInfo) {
+  if (!('file' in info) || !info.file.endsWith('.onnx')) return;
+
+  if (info.status === 'progress' && info.total > 0) {
+    const progress = Math.floor(info.progress);
+    // Skip per-chunk updates that don't change the displayed percentage
+    if (modelLoadState.status === 'downloading' && modelLoadState.progress === progress) return;
+    setModelLoadState({ status: 'downloading', progress });
+  } else if (info.status === 'done') {
+    setModelLoadState({ status: 'preparing' });
+  }
 }
 
 // WebGPU availability depends on the platform webview (e.g. WebKitGTK on Linux
@@ -47,7 +75,7 @@ async function pickDevice(): Promise<'webgpu' | 'wasm'> {
 }
 
 export async function loadModel() {
-  setModelLoading(true);
+  setModelLoadState({ status: 'downloading', progress: null });
   try {
     model = {
       processor: await AutoProcessor.from_pretrained(modelId),
@@ -55,10 +83,11 @@ export async function loadModel() {
       model: (await CLIPModel.from_pretrained(modelId, {
         dtype: 'fp32',
         device: await pickDevice(),
+        progress_callback: onProgress,
       })) as CLIPModel,
     };
   } finally {
-    setModelLoading(false);
+    setModelLoadState({ status: 'idle' });
   }
 }
 
