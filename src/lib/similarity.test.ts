@@ -35,6 +35,7 @@ function mockImages(scores: Record<string, number>) {
   vi.mocked(loadImagesFromDir).mockResolvedValue(
     Object.entries(scores).map(([fileName, score]) => ({
       fileName,
+      path: `/d/${fileName}`,
       image: { score } as unknown as RawImage,
     })),
   );
@@ -95,9 +96,9 @@ describe('getSimilarImages', () => {
     const { result } = await collect(getSimilarImages('cat', '/d', 8));
 
     expect(result.results).toEqual([
-      { fileName: 'high', score: 0.9 },
-      { fileName: 'mid', score: 0.5 },
-      { fileName: 'low', score: 0.1 },
+      { fileName: 'high', path: '/d/high', score: 0.9 },
+      { fileName: 'mid', path: '/d/mid', score: 0.5 },
+      { fileName: 'low', path: '/d/low', score: 0.1 },
     ]);
   });
 
@@ -108,7 +109,7 @@ describe('getSimilarImages', () => {
 
     expect(result.filesProcessed).toBe(15);
     expect(result.results).toHaveLength(10);
-    expect(result.results[0]).toEqual({ fileName: 'img14', score: 0.14 });
-    expect(result.results[9]).toEqual({ fileName: 'img5', score: 0.05 });
+    expect(result.results[0]).toEqual({ fileName: 'img14', path: '/d/img14', score: 0.14 });
+    expect(result.results[9]).toEqual({ fileName: 'img5', path: '/d/img5', score: 0.05 });
   });
 });

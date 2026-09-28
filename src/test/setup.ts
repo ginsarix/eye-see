@@ -18,6 +18,24 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// jsdom doesn't implement object URLs; tests spy on these to control and check them
+Object.assign(URL, {
+  createObjectURL: () => 'blob:stub',
+  revokeObjectURL: () => undefined,
+});
+
+// jsdom doesn't implement modal dialogs, so emulate the open attribute and close event
+Object.assign(HTMLDialogElement.prototype, {
+  showModal(this: HTMLDialogElement) {
+    this.open = true;
+  },
+  close(this: HTMLDialogElement) {
+    if (!this.open) return;
+    this.open = false;
+    this.dispatchEvent(new Event('close'));
+  },
+});
+
 afterEach(() => {
   cleanup();
   clearMocks();

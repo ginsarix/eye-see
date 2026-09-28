@@ -45,8 +45,10 @@ async function search(query: string) {
     { timeout: 5 * 60_000, interval: 250, timeoutMsg: `Search for "${query}" did not finish` },
   );
 
-  const results = await $$('p*=File name:').map((el) => el.getText());
-  return results.map((text) => /^File name: (.+) Score: /.exec(text)![1]);
+  const labels = await $$('button[aria-label^="Preview "]').map((el) =>
+    el.getAttribute('aria-label'),
+  );
+  return labels.map((label) => (label ?? '').replace(/^Preview /, ''));
 }
 
 describe('image search', () => {
@@ -74,4 +76,44 @@ describe('image search', () => {
       await expect($(`p=Files processed: ${expectedMatches.length}`)).toBeDisplayed();
     });
   }
+
+  it('shows a thumbnail for every result', async () => {
+    await search(expectedMatches[0].query);
+
+    const thumbnails = $$('ul[aria-label="Search results"] img');
+    await expect(thumbnails).toBeElementsArrayOfSize(expectedMatches.length);
+    await browser.waitUntil(
+      () =>
+        browser.execute(() =>
+          Array.from(
+            document.querySelectorAll<HTMLImageElement>('ul[aria-label="Search results"] img'),
+          ).every((img) => img.complete && img.naturalWidth > 0),
+        ),
+      { timeout: 10_000, timeoutMsg: 'Result thumbnails did not load' },
+    );
+  });
+
+  it('opens a result in a preview dialog and closes it with Escape', async () => {
+    const { query, fileName } = expectedMatches[1];
+    await search(query);
+
+    const thumbnail = $(`button[aria-label="Preview ${fileName}"]`);
+    // Thumbnails stay disabled until their image has loaded
+    await thumbnail.waitForEnabled();
+    await thumbnail.click();
+
+    const dialog = $('dialog[open]');
+    await expect(dialog).toBeDisplayed();
+    await expect(dialog.$('h2')).toHaveText(fileName);
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          () => (document.querySelector<HTMLImageElement>('dialog img')?.naturalWidth ?? 0) > 0,
+        ),
+      { timeout: 10_000, timeoutMsg: 'Preview image did not load' },
+    );
+
+    await browser.keys('Escape');
+    await expect($('dialog')).not.toBeExisting();
+  });
 });

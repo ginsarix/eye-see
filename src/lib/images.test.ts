@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { RawImage } from '@huggingface/transformers';
 import type { DirEntry } from './fs';
-import { loadImagesFromDir } from './images';
+import { loadImageUrl, loadImagesFromDir } from './images';
 
 vi.mock('@huggingface/transformers', () => ({
   RawImage: { fromBlob: vi.fn() },
@@ -36,7 +36,10 @@ describe('loadImagesFromDir', () => {
 
     const images = await loadImagesFromDir('/d');
 
-    expect(images.map((i) => i.fileName)).toEqual(['cat.jpg', 'DOG.PNG']);
+    expect(images.map(({ fileName, path }) => ({ fileName, path }))).toEqual([
+      { fileName: 'cat.jpg', path: '/d/cat.jpg' },
+      { fileName: 'DOG.PNG', path: '/d/DOG.PNG' },
+    ]);
     expect(readFile).toHaveBeenCalledTimes(2);
   });
 
@@ -90,5 +93,26 @@ describe('loadImagesFromDir', () => {
     mockFs([]);
 
     await expect(loadImagesFromDir('/d')).resolves.toEqual([]);
+  });
+});
+
+describe('loadImageUrl', () => {
+  it('creates an object URL for the file contents with its MIME type', async () => {
+    mockFs([]);
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cat');
+
+    await expect(loadImageUrl('/d/cat.webp')).resolves.toBe('blob:cat');
+
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(blob.type).toBe('image/webp');
+    expect(await blob.text()).toBe('/d/cat.webp');
+  });
+
+  it('rejects when the file cannot be read', async () => {
+    mockIPC(() => {
+      throw new Error('not found');
+    });
+
+    await expect(loadImageUrl('/d/missing.png')).rejects.toThrow('not found');
   });
 });
