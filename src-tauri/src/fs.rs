@@ -9,6 +9,9 @@ pub struct DirEntry {
     pub name: String,
     pub path: PathBuf,
     pub is_file: bool,
+    /// Whether the entry itself is a symlink, so callers walking the tree
+    /// can avoid following links into cycles.
+    pub is_symlink: bool,
 }
 
 /// Lists the direct children of `directory_path`.
@@ -38,6 +41,10 @@ async fn list_directory(dir: &Path) -> std::io::Result<Vec<DirEntry>> {
 
     while let Some(entry) = read_dir.next_entry().await? {
         let path = entry.path();
+        let is_symlink = entry
+            .file_type()
+            .await
+            .is_ok_and(|file_type| file_type.is_symlink());
         // `metadata` follows symlinks, so a link to an image counts as a file.
         let Ok(metadata) = tokio::fs::metadata(&path).await else {
             log::warn!("Skipping {}: could not read metadata", path.display());
@@ -48,6 +55,7 @@ async fn list_directory(dir: &Path) -> std::io::Result<Vec<DirEntry>> {
             name: entry.file_name().to_string_lossy().into_owned(),
             path,
             is_file: metadata.is_file(),
+            is_symlink,
         });
     }
 
@@ -83,17 +91,20 @@ mod tests {
                 DirEntry {
                     name: "a.jpg".into(),
                     path: dir.join("a.jpg"),
-                    is_file: true
+                    is_file: true,
+                    is_symlink: false
                 },
                 DirEntry {
                     name: "b.png".into(),
                     path: dir.join("b.png"),
-                    is_file: true
+                    is_file: true,
+                    is_symlink: false
                 },
                 DirEntry {
                     name: "nested".into(),
                     path: dir.join("nested"),
-                    is_file: false
+                    is_file: false,
+                    is_symlink: false
                 },
             ]
         );
@@ -113,6 +124,25 @@ mod tests {
 
         let names: Vec<_> = entries.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, ["ok.png"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn flags_symlinks() {
+        let dir = temp_dir("flags-symlink");
+        std::fs::create_dir(dir.join("real")).unwrap();
+        std::os::unix::fs::symlink(dir.join("real"), dir.join("link")).unwrap();
+
+        let entries = read_directory(dir.to_string_lossy().into_owned())
+            .await
+            .unwrap();
+
+        let flags: Vec<_> = entries
+            .iter()
+            .map(|e| (e.name.as_str(), e.is_file, e.is_symlink))
+            .collect();
+        assert_eq!(flags, [("link", false, true), ("real", false, false)]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
