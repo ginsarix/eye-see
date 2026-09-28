@@ -14,7 +14,7 @@ import { useImageSearch } from './use-image-search';
 vi.mock('../lib/similarity', () => ({ getSimilarImages: vi.fn() }));
 
 const finalResult: SimilarityFinalResult = {
-  results: [{ fileName: 'cat.jpg', score: 0.9 }],
+  results: [{ fileName: 'cat.jpg', path: '/photos/cat.jpg', score: 0.9 }],
   filesProcessed: 2,
 };
 

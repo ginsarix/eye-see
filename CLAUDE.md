@@ -24,11 +24,13 @@ Use `pnpm` (see `packageManager` in `package.json`).
 - `lib/fs.ts` is the only place that talks to Tauri IPC (`invoke` and the dialog plugin).
 - `lib/clip.ts` holds the model as module-level state. `main.tsx` calls `loadModel()` in the background before rendering; `useModelLoadState` subscribes to it through `useSyncExternalStore`. The load state goes `downloading` (with a percentage tracked from the `.onnx` file's `progress_callback` events only) → `preparing` (session creation, which reports no progress) → `ready` (or `error`). The search button stays disabled until `ready`. It picks WebGPU when an adapter is available and otherwise falls back to WASM.
 - `lib/similarity.ts` `getSimilarImages` is an async generator: it waits for the model, loads and decodes every image in the directory (`lib/images.ts`), runs CLIP in batches (yielding `{ filesProcessed }` progress after each batch), and returns the top 10 by cosine similarity. Nothing is cached between searches.
+- Result previews (`components/result-thumbnail.tsx`, `components/image-preview-dialog.tsx`) re-read each match's bytes through `read_file` into an object URL (`hooks/use-image-url.ts`, which revokes it on unmount). The asset protocol is deliberately left off, since its scope would have to cover any folder the user picks. The enlarged view is a native `<dialog>` opened with `showModal()`.
 - `hooks/use-image-search.ts` drives the generator and validates inputs. The selected directory and batch size live in jotai atoms (`src/atoms/`) so the selectors and the search hook share them; the last directory is persisted in `localStorage['directory']` and restored on mount by `DirectorySelector`.
 
 ## Testing
 
 - Unit tests are colocated as `src/**/*.test.{ts,tsx}` (Vitest only picks up that pattern). Tauri IPC is faked with `mockIPC` from `@tauri-apps/api/mocks`; `src/test/setup.ts` calls `clearMocks()`, clears `localStorage`, and stubs `matchMedia` after each test.
+- jsdom lacks `URL.createObjectURL`/`revokeObjectURL` and modal dialogs, so `src/test/setup.ts` stubs them (spy on the `URL` methods in tests; `showModal`/`close` toggle `open` and fire `close`).
 - Render components with `renderWithStore` / `renderHookWithStore` from `src/test/utils.tsx` so each test gets a fresh jotai store.
 - `lib/clip.ts` keeps state at module level, so its tests re-import it with `vi.resetModules()`.
 - E2E specs live in `e2e/specs/*.e2e.ts` with their own `e2e/tsconfig.json`, and they search the fixture images in `src/test/images/`. They use `@wdio/tauri-service` with the `embedded` driver: the `tauri-plugin-wdio-webdriver` crate is an optional dependency enabled only by the `e2e` cargo feature. It exposes an automation server over HTTP, so never enable that feature in release builds.

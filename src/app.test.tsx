@@ -24,6 +24,7 @@ describe('App', () => {
     clip.modelLoadState = { status: 'ready' };
     mockIPC((cmd) => {
       if (cmd === 'plugin:dialog|open') return '/photos';
+      if (cmd === 'read_file') return new ArrayBuffer(0);
     });
     vi.mocked(getSimilarImages).mockReset();
     vi.mocked(getSimilarImages).mockImplementation(async function* () {
@@ -31,8 +32,8 @@ describe('App', () => {
       return {
         filesProcessed: 2,
         results: [
-          { fileName: 'beach.jpg', score: 0.3 },
-          { fileName: 'city.png', score: 0.1 },
+          { fileName: 'beach.jpg', path: '/photos/beach.jpg', score: 0.3 },
+          { fileName: 'city.png', path: '/photos/city.png', score: 0.1 },
         ],
       };
     });
@@ -84,8 +85,10 @@ describe('App', () => {
     await userEvent.type(screen.getByPlaceholderText('Query'), 'sunset');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    expect(await screen.findByText('File name: beach.jpg Score: 0.30000')).toBeInTheDocument();
-    expect(screen.getByText('File name: city.png Score: 0.10000')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Preview beach.jpg' })).toBeInTheDocument();
+    expect(screen.getByText('Score: 0.30000')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Preview city.png' })).toBeInTheDocument();
+    expect(screen.getByText('Score: 0.10000')).toBeInTheDocument();
     expect(screen.getByText('Files processed: 2')).toBeInTheDocument();
     expect(getSimilarImages).toHaveBeenCalledWith('sunset', '/photos', 8);
   });

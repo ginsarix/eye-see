@@ -4,6 +4,7 @@ import { loadImagesFromDir } from './images';
 
 export interface SimilarityMatch {
   fileName: string;
+  path: string;
   score: number;
 }
 
@@ -45,7 +46,6 @@ export async function* getSimilarImages(
   for (let i = 0; i < imageData.length; i += batchSize) {
     const batch = imageData.slice(i, i + batchSize);
     const batchImages = batch.map((d) => d.image);
-    const batchFileNames = batch.map((d) => d.fileName);
 
     const imageInputs = await model.processor(batchImages);
 
@@ -60,7 +60,7 @@ export async function* getSimilarImages(
     // Compare each image embedding with text embedding
     for (let j = 0; j < batch.length; j++) {
       const score = cos_sim(textEmbedding as number[], outputs.image_embeds[j].data);
-      allResults.push({ fileName: batchFileNames[j], score });
+      allResults.push({ fileName: batch[j].fileName, path: batch[j].path, score });
     }
 
     filesProcessed += batch.length;
