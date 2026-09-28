@@ -1,8 +1,8 @@
-import { Button, Text } from '@chakra-ui/react';
 import { useAtom } from 'jotai';
 import { useEffect } from 'react';
 import { directoryAtom, directoryFieldInvalidAtom } from '../atoms/directory';
 import { openDirectory } from '../api/fs';
+import { Button } from './button';
 
 export function DirectorySelector() {
   const [directory, setDirectory] = useAtom(directoryAtom);
@@ -26,13 +26,11 @@ export function DirectorySelector() {
   };
   return (
     <>
-      <Button colorPalette="blue" onClick={chooseDirectory}>
-        Choose Directory
-      </Button>
+      <Button onClick={chooseDirectory}>Choose Directory</Button>
       {(directory || directoryFieldInvalid) && (
-        <Text color={directoryFieldInvalid ? 'red.500' : 'initial'} mt={4}>
+        <p className={`mt-4 ${directoryFieldInvalid ? 'text-red-500' : ''}`}>
           {directoryFieldInvalid ? 'Please select a directory' : `Selected: ${directory}`}
-        </Text>
+        </p>
       )}
     </>
   );

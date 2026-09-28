@@ -1,6 +1,7 @@
 import { type FormEvent, useState, useSyncExternalStore } from 'react';
-import { Button, Box, Text, HStack, Spinner, Input, chakra } from '@chakra-ui/react';
-import { ColorModeButton } from './components/ui/color-mode';
+import { ColorModeButton } from './components/color-mode-button';
+import { Button } from './components/button';
+import { Spinner } from './components/spinner';
 import { subscribeToModelLoading, modelLoading } from './constants/model';
 import { LuSearch } from 'react-icons/lu';
 import {
@@ -72,53 +73,43 @@ export default function App() {
   };
 
   return (
-    <Box p={8} bg="bg" color="fg" minH="100vh">
-      <HStack justify="space-between" mb={6}>
-        <Text fontSize="xl" fontWeight="bold">
-          Eye See
-        </Text>
-        <HStack gap={3}>
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-bold">Eye See</h1>
+        <div className="flex items-center gap-3">
           {isModelLoading && (
-            <HStack gap={2} color="fg.muted">
-              <Spinner size="sm" />
-              <Text fontSize="sm">Loading model...</Text>
-            </HStack>
+            <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+              <Spinner />
+              <span className="text-sm">Loading model...</span>
+            </div>
           )}
           <ColorModeButton />
-        </HStack>
-      </HStack>
+        </div>
+      </div>
 
       <DirectorySelector />
 
       <BatchSizeSelector />
 
-      <HStack mt={10}>
-        <chakra.form onSubmit={querySubmit} display="contents">
-          <Input
-            value={query}
-            onInput={(e) => setQuery(e.currentTarget.value)}
-            placeholder="Query"
-          />
-          <Button
-            type="submit"
-            colorPalette="blue"
-            loading={queryLoadState?.loading}
-            disabled={queryLoadState?.loading}
-          >
-            <LuSearch />
-          </Button>
-        </chakra.form>
-      </HStack>
+      <form onSubmit={querySubmit} className="mt-10 flex items-center gap-2">
+        <input
+          value={query}
+          onInput={(e) => setQuery(e.currentTarget.value)}
+          placeholder="Query"
+          className="h-10 w-full min-w-0 rounded-md border border-zinc-200 bg-transparent px-3 outline-none placeholder:text-zinc-500 focus-visible:border-blue-600 focus-visible:ring-1 focus-visible:ring-blue-600 dark:border-zinc-800"
+        />
+        <Button type="submit" aria-label="Search" loading={queryLoadState?.loading}>
+          <LuSearch className="size-4" />
+        </Button>
+      </form>
 
-      {queryLoadState?.filesProcessed && (
-        <Text>Files processed: {queryLoadState?.filesProcessed}</Text>
-      )}
+      {queryLoadState?.filesProcessed && <p>Files processed: {queryLoadState?.filesProcessed}</p>}
 
       {queryResults?.results.map((r) => (
-        <Text key={r.fileName}>
+        <p key={r.fileName}>
           File name: {r.fileName} Score: {r.score.toPrecision(5)}
-        </Text>
+        </p>
       ))}
-    </Box>
+    </div>
   );
 }
