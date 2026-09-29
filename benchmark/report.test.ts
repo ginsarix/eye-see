@@ -42,6 +42,7 @@ describe('formatReport', () => {
     expect(markdown).toContain('- Commit: abcdef1 (uncommitted changes)');
     expect(markdown).toContain('- Machine: darwin 25.6.0 arm64, Apple M3, 8 cores, 16 GB');
     expect(markdown).toContain('- WebGPU adapter: apple metal-3');
+    expect(markdown).toContain('- Models: the text model always runs at fp32; dtypes below are the vision model\'s');
     expect(markdown).toContain(
       '- Images: 128, query "a dog running on the beach", 1 warm-up + 3 measured searches per batch size (medians)',
     );
@@ -55,7 +56,7 @@ describe('formatReport', () => {
   });
 
   it('summarizes each dtype, compared with fp32', () => {
-    expect(markdown).toContain('| Dtype | Prepare | Best images/s | R@1 | R@5 | MRR | ΔR@1 vs fp32 |');
+    expect(markdown).toContain('| Vision dtype | Prepare | Best images/s | R@1 | R@5 | MRR | ΔR@1 vs fp32 |');
     expect(markdown).toContain('| fp32 | 1.5 s | 80.0 (batch 8) | 87.5% | 96.9% | 0.900 | – |');
     expect(markdown).toContain('| q4 | – | 120.0 (batch 8) | 85.9% | 96.9% | 0.900 | -1.6 pp |');
   });
@@ -71,7 +72,7 @@ describe('formatReport', () => {
 
   it('shows a speed table', () => {
     expect(markdown).toContain('## Speed');
-    expect(markdown).toContain('| Dtype | 1 | 8 |');
+    expect(markdown).toContain('| Vision dtype | 1 | 8 |');
     expect(markdown).toContain('| fp32 | 20.0 (50%) | 80.0 (75%) |');
     expect(markdown).toContain('| q4 | 30.0 (40%) | 120.0 (60%) |');
   });
@@ -88,7 +89,7 @@ describe('formatReport', () => {
     const failed = formatReport(report({ error: 'Build failed' }));
 
     expect(failed).toContain('⚠ Build failed');
-    expect(failed).not.toContain('| Dtype |');
+    expect(failed).not.toContain('| Vision dtype |');
     expect(failed).not.toContain('## Speed');
   });
 });

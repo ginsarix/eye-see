@@ -76,7 +76,7 @@ function fastest(batchSizes: BatchSizeResult[]) {
   );
 }
 
-const SUMMARY_COLUMNS = ['Dtype', 'Prepare', 'Best images/s', 'R@1', 'R@5', 'MRR', 'ΔR@1 vs fp32'];
+const SUMMARY_COLUMNS = ['Vision dtype', 'Prepare', 'Best images/s', 'R@1', 'R@5', 'MRR', 'ΔR@1 vs fp32'];
 
 function summaryTable(results: RunResults): string[] {
   const fp32 = results.dtypes.fp32;
@@ -124,7 +124,7 @@ function speedTable(results: RunResults): string[] {
     '',
     "Median images per second at each batch size, with inference's share of the search time in brackets.",
     '',
-    row(['Dtype', ...batchSizes.map(String)]),
+    row(['Vision dtype', ...batchSizes.map(String)]),
     row(Array(width).fill('---')),
   ];
   for (const dtype of DTYPES) {
@@ -162,6 +162,7 @@ export function formatReport(report: BenchmarkReport): string {
     lines.push(`- WebGPU adapter: ${name}`);
   }
   lines.push(
+    "- Models: the text model always runs at fp32; dtypes below are the vision model's",
     `- Images: ${report.imageCount}, query "${report.query}", ${report.warmups} warm-up + ` +
       `${report.runs} measured searches per batch size (medians)`,
     '',

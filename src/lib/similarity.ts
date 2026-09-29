@@ -69,13 +69,16 @@ export async function* getSimilarImages(
 
   yield { filesProcessed: 0, files };
 
-  // Get text embedding
+  // Embed the query once; only the vision model runs per batch
   const textInputs = loaded.tokenizer([query], { padding: true, truncation: true });
+  const { text_embeds } = await timed(timings, 'inferenceMs', () =>
+    loaded.textModel(textInputs),
+  );
+  const textEmbedding = text_embeds[0].data as number[];
 
   // Decode and process images one batch at a time, so only a batch is in memory
   const allResults: SimilarityMatch[] = [];
   let filesProcessed = 0;
-  let textEmbedding: Float32Array | number[] | undefined;
 
   for (let i = 0; i < imageFiles.length; i += batchSize) {
     const batch = await timed(timings, 'decodeMs', async () => {
@@ -95,19 +98,13 @@ export async function* getSimilarImages(
         loaded.processor(batch.map((d) => d.image)),
       );
 
-      // Run model with both text and image inputs
-      const outputs = await timed(timings, 'inferenceMs', () =>
-        loaded.model({ ...textInputs, ...imageInputs }),
+      const { image_embeds } = await timed(timings, 'inferenceMs', () =>
+        loaded.visionModel(imageInputs),
       );
-
-      // Get text embedding from first batch (it's the same for all)
-      if (!textEmbedding) {
-        textEmbedding = outputs.text_embeds[0].data;
-      }
 
       // Compare each image embedding with text embedding
       for (let j = 0; j < batch.length; j++) {
-        const score = cos_sim(textEmbedding as number[], outputs.image_embeds[j].data);
+        const score = cos_sim(textEmbedding, image_embeds[j].data);
         allResults.push({ fileName: batch[j].file.name, path: batch[j].file.path, score });
       }
     }
