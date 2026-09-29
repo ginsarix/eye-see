@@ -165,6 +165,61 @@ describe('clip', () => {
     );
   });
 
+  it('loads fp32 by default', async () => {
+    const clip = await importClip();
+
+    await clip.loadModel();
+
+    expect(CLIPModel.from_pretrained).toHaveBeenCalledWith(
+      'Xenova/clip-vit-base-patch32',
+      expect.objectContaining({ dtype: 'fp32' }),
+    );
+  });
+
+  it('loads the requested dtype', async () => {
+    const clip = await importClip();
+
+    await clip.loadModel('q4');
+
+    expect(CLIPModel.from_pretrained).toHaveBeenCalledWith(
+      'Xenova/clip-vit-base-patch32',
+      expect.objectContaining({ dtype: 'q4' }),
+    );
+  });
+
+  it('records the device it picked', async () => {
+    const clip = await importClip();
+    expect(clip.getModelDevice()).toBeUndefined();
+
+    await clip.loadModel();
+
+    expect(clip.getModelDevice()).toBe('wasm');
+  });
+
+  it('measures session creation from the weights finishing to ready', async () => {
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.mocked(CLIPModel.from_pretrained).mockImplementation(async (_, options) => {
+      now = 100;
+      options?.progress_callback?.({ status: 'done', name: 'm', file: 'onnx/model.onnx' });
+      now = 350;
+      return 'model' as never;
+    });
+    const clip = await importClip();
+
+    await clip.loadModel();
+
+    expect(clip.getPrepareMs()).toBe(250);
+  });
+
+  it('has no prepare time when the weights never report finishing', async () => {
+    const clip = await importClip();
+
+    await clip.loadModel();
+
+    expect(clip.getPrepareMs()).toBeNull();
+  });
+
   describe('in benchmark mode', () => {
     beforeEach(() => {
       vi.stubEnv('IS_BENCHMARK_MODE', 'true');

@@ -8,6 +8,8 @@ import {
 
 const modelId = 'Xenova/clip-vit-base-patch32';
 
+export type ModelDtype = 'fp32' | 'fp16' | 'q4f16' | 'q8' | 'q4' | 'bnb4';
+
 export let model:
   | {
       processor: Processor;
@@ -42,6 +44,25 @@ function setModelLoadState(state: ModelLoadState) {
   loadStateListeners.forEach((cb) => cb(state));
 }
 
+// Session creation (and shader compilation on WebGPU) starts once the weights
+// have arrived, so it's timed from the .onnx file's `done` event. That leaves
+// out the download, which depends on the network and the cache.
+let prepareStartedAt: number | undefined;
+let prepareMs: number | null = null;
+let modelDevice: 'webgpu' | 'wasm' | undefined;
+
+export function getPrepareMs() {
+  return prepareMs;
+}
+
+export function getModelDevice() {
+  return modelDevice;
+}
+
+function finishPrepare() {
+  prepareMs = prepareStartedAt === undefined ? null : performance.now() - prepareStartedAt;
+}
+
 type ProgressInfo = Parameters<
   NonNullable<NonNullable<Parameters<typeof CLIPModel.from_pretrained>[1]>['progress_callback']>
 >[0];
@@ -58,6 +79,7 @@ function onProgress(info: ProgressInfo) {
     if (modelLoadState.status === 'downloading' && modelLoadState.progress === progress) return;
     setModelLoadState({ status: 'downloading', progress });
   } else if (info.status === 'done') {
+    prepareStartedAt = performance.now();
     setModelLoadState({ status: 'preparing' });
   }
 }
@@ -87,20 +109,24 @@ async function pickBenchmarkDevice(): Promise<'webgpu' | 'wasm'> {
   throw new Error(`Model device "${device}" is unavailable`);
 }
 
-export async function loadModel() {
+export async function loadModel(dtype: ModelDtype = 'fp32') {
   setModelLoadState({ status: 'downloading', progress: null });
+  prepareStartedAt = undefined;
+  prepareMs = null;
   try {
     const device =
       import.meta.env.IS_BENCHMARK_MODE === 'true' ? await pickBenchmarkDevice() : await pickDevice();
+    modelDevice = device;
     model = {
       processor: await AutoProcessor.from_pretrained(modelId),
       tokenizer: await AutoTokenizer.from_pretrained(modelId),
       model: (await CLIPModel.from_pretrained(modelId, {
-        dtype: 'fp32',
+        dtype,
         device,
         progress_callback: onProgress,
       })) as CLIPModel,
     };
+    finishPrepare();
     setModelLoadState({ status: 'ready' });
   } catch (error) {
     setModelLoadState({ status: 'error' });
