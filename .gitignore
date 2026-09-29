@@ -91,3 +91,6 @@ dist/
 
 # Cursor
 .cursor/
+
+# Benchmark results (machine-specific)
+benchmark/results/

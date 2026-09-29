@@ -47,6 +47,13 @@ describe('formatReport', () => {
     );
   });
 
+  it('names the adapter without repeating fields', () => {
+    // WebKit reports "apple" for vendor, architecture and description alike
+    const apple = { vendor: 'apple', architecture: 'apple', description: 'apple' };
+
+    expect(formatReport(report({ adapter: apple, dtypes: {} }))).toContain('- WebGPU adapter: apple\n');
+  });
+
   it('summarizes each dtype, compared with fp32', () => {
     expect(markdown).toContain('| Dtype | Prepare | Best images/s | R@1 | R@5 | MRR | ΔR@1 vs fp32 |');
     expect(markdown).toContain('| fp32 | 1.5 s | 80.0 (batch 8) | 87.5% | 96.9% | 0.900 | – |');
@@ -70,9 +77,9 @@ describe('formatReport', () => {
   });
 
   it('shows no fp32 delta without an fp32 result', () => {
-    const withoutFp32 = formatReport(report({ adapter: null, dtypes: { q8: result(0.8, [speed(1, 10, 0.5)]) } }));
+    const withoutFp32 = formatReport(report({ adapter: null, dtypes: { q4: result(0.8, [speed(1, 10, 0.5)]) } }));
 
-    expect(withoutFp32).toContain('| q8 | 1.5 s | 10.0 (batch 1) | 80.0% | 96.9% | 0.900 | – |');
+    expect(withoutFp32).toContain('| q4 | 1.5 s | 10.0 (batch 1) | 80.0% | 96.9% | 0.900 | – |');
     expect(withoutFp32).not.toContain('NaN');
     expect(withoutFp32).not.toContain('WebGPU adapter');
   });
@@ -97,9 +104,9 @@ describe('completeResults', () => {
   it('keeps finished dtypes and marks the rest as not run', () => {
     const fp32 = result(0.875, [speed(1, 20, 0.5)]);
 
-    expect(completeResults({ adapter: null, dtypes: { fp32 } }, ['fp32', 'q8'], false)).toEqual({
+    expect(completeResults({ adapter: null, dtypes: { fp32 } }, ['fp32', 'q4'], false)).toEqual({
       adapter: null,
-      dtypes: { fp32, q8: { error: 'Did not run: WebdriverIO stopped early' } },
+      dtypes: { fp32, q4: { error: 'Did not run: WebdriverIO stopped early' } },
     });
   });
 });

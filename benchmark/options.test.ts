@@ -7,12 +7,12 @@ describe('parseList', () => {
   });
 
   it('keeps the canonical order and drops duplicates and blanks', () => {
-    expect(parseList('q8, fp32,q8,', DTYPES, 'dtypes')).toEqual(['fp32', 'q8']);
+    expect(parseList('q4, fp32,q4,', DTYPES, 'dtypes')).toEqual(['fp32', 'q4']);
   });
 
-  it('rejects unknown values', () => {
-    expect(() => parseList('int16', DTYPES, 'dtypes')).toThrow(
-      '--dtypes must be a comma-separated list of fp32, fp16, q4f16, q8, q4, bnb4; got "int16"',
+  it('rejects dtypes that WebGPU cannot run', () => {
+    expect(() => parseList('q8', DTYPES, 'dtypes')).toThrow(
+      '--dtypes must be a comma-separated list of fp32, fp16, q4f16, q4; got "q8"',
     );
   });
 

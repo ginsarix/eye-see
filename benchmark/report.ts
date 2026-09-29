@@ -157,7 +157,8 @@ export function formatReport(report: BenchmarkReport): string {
     `- Machine: ${machine.os} ${machine.arch}, ${machine.cpu}, ${machine.cores} cores, ${machine.memoryGB} GB`,
   ];
   if (adapter) {
-    const name = [adapter.vendor, adapter.architecture, adapter.description].filter(Boolean).join(' ');
+    const parts = [adapter.vendor, adapter.architecture, adapter.description].filter(Boolean);
+    const name = [...new Set(parts)].join(' ');
     lines.push(`- WebGPU adapter: ${name}`);
   }
   lines.push(

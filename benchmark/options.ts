@@ -3,7 +3,10 @@ import type { ModelDtype } from '../src/lib/clip';
 // Shared by the runner and the WebdriverIO spec. Node runs these files directly,
 // so they may only import types from src/.
 
-export const DTYPES = ['fp32', 'fp16', 'q4f16', 'q8', 'q4', 'bnb4'] as const satisfies readonly ModelDtype[];
+// Only dtypes whose ops all run on WebGPU. q8 (MatMulInteger, DynamicQuantizeLinear)
+// and bnb4 (MatMulBnb4) use ops ONNX Runtime Web has no WebGPU kernels for, so
+// those nodes fall back to single-threaded WASM on the CPU.
+export const DTYPES = ['fp32', 'fp16', 'q4f16', 'q4'] as const satisfies readonly ModelDtype[];
 export type Dtype = (typeof DTYPES)[number];
 
 export const QUERY = 'a dog running on the beach';
