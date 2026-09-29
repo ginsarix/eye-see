@@ -62,28 +62,42 @@ function onProgress(info: ProgressInfo) {
   }
 }
 
+async function hasWebGPUAdapter() {
+  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  try {
+    return Boolean(gpu && (await gpu.requestAdapter()));
+  } catch {
+    return false;
+  }
+}
+
 // WebGPU availability depends on the platform webview (e.g. WebKitGTK on Linux
 // lacks it), so fall back to WASM when no adapter is available.
 async function pickDevice(): Promise<'webgpu' | 'wasm'> {
-  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
-  try {
-    if (gpu && (await gpu.requestAdapter())) return 'webgpu';
-  } catch {
-    // fall through
-  }
+  if (await hasWebGPUAdapter()) return 'webgpu';
   console.warn('WebGPU unavailable, falling back to WASM');
   return 'wasm';
+}
+
+// Benchmarks pin the device instead of falling back, so a run never silently
+// measures a different device than the one it asked for.
+async function pickBenchmarkDevice(): Promise<'webgpu' | 'wasm'> {
+  const device = import.meta.env.BENCHMARK_MODEL_DEVICE || 'webgpu';
+  if (device === 'wasm' || (device === 'webgpu' && (await hasWebGPUAdapter()))) return device;
+  throw new Error(`Model device "${device}" is unavailable`);
 }
 
 export async function loadModel() {
   setModelLoadState({ status: 'downloading', progress: null });
   try {
+    const device =
+      import.meta.env.IS_BENCHMARK_MODE === 'true' ? await pickBenchmarkDevice() : await pickDevice();
     model = {
       processor: await AutoProcessor.from_pretrained(modelId),
       tokenizer: await AutoTokenizer.from_pretrained(modelId),
       model: (await CLIPModel.from_pretrained(modelId, {
         dtype: 'fp32',
-        device: await pickDevice(),
+        device,
         progress_callback: onProgress,
       })) as CLIPModel,
     };

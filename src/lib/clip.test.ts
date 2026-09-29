@@ -28,6 +28,7 @@ describe('clip', () => {
   afterEach(() => {
     setGpu(undefined);
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it('starts in the loading state', async () => {
@@ -162,6 +163,59 @@ describe('clip', () => {
       'Xenova/clip-vit-base-patch32',
       expect.objectContaining({ device: 'wasm' }),
     );
+  });
+
+  describe('in benchmark mode', () => {
+    beforeEach(() => {
+      vi.stubEnv('IS_BENCHMARK_MODE', 'true');
+    });
+
+    it('defaults to WebGPU', async () => {
+      setGpu({ requestAdapter: vi.fn().mockResolvedValue({}) });
+      const clip = await importClip();
+
+      await clip.loadModel();
+
+      expect(CLIPModel.from_pretrained).toHaveBeenCalledWith(
+        'Xenova/clip-vit-base-patch32',
+        expect.objectContaining({ device: 'webgpu' }),
+      );
+    });
+
+    it('requires WebGPU by default', async () => {
+      const clip = await importClip();
+
+      await expect(clip.loadModel()).rejects.toThrow('Model device "webgpu" is unavailable');
+    });
+
+    it('uses the device from BENCHMARK_MODEL_DEVICE', async () => {
+      vi.stubEnv('BENCHMARK_MODEL_DEVICE', 'wasm');
+      setGpu({ requestAdapter: vi.fn().mockResolvedValue({}) });
+      const clip = await importClip();
+
+      await clip.loadModel();
+
+      expect(CLIPModel.from_pretrained).toHaveBeenCalledWith(
+        'Xenova/clip-vit-base-patch32',
+        expect.objectContaining({ device: 'wasm' }),
+      );
+    });
+
+    it.each([
+      ['WebGPU without an adapter', 'webgpu', { requestAdapter: vi.fn().mockResolvedValue(null) }],
+      ['WebGPU when it is missing', 'webgpu', undefined],
+      ['an unknown device', 'cuda', { requestAdapter: vi.fn().mockResolvedValue({}) }],
+    ])('fails instead of falling back for %s', async (_, device, gpu) => {
+      vi.stubEnv('BENCHMARK_MODEL_DEVICE', device);
+      setGpu(gpu);
+      const clip = await importClip();
+
+      await expect(clip.loadModel()).rejects.toThrow(`Model device "${device}" is unavailable`);
+
+      expect(clip.modelLoadState).toEqual({ status: 'error' });
+      expect(CLIPModel.from_pretrained).not.toHaveBeenCalled();
+      expect(console.warn).not.toHaveBeenCalled();
+    });
   });
 
   it('waitModelLoad resolves once the model is loaded', async () => {
