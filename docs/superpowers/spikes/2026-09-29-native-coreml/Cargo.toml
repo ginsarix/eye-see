@@ -1,0 +1,21 @@
+[package]
+name = "native-spike"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ort = { version = "=2.0.0-rc.13", features = ["coreml"] }
+ndarray = "0.17"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+rayon = "1"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-core-ml = "0.3"
+
+[profile.release]
+debug = false
