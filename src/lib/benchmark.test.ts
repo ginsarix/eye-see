@@ -181,18 +181,19 @@ describe('runBenchmark', () => {
     expect(result.batchSizes[0].imagesPerSecond).toBeGreaterThan(0);
   });
 
-  it('measures accuracy with every caption, in batches of 8 images', async () => {
+  it('measures accuracy with images in batches of 8 and each caption on its own', async () => {
     const fakeModel = createFakeModel();
     clip.model = fakeModel;
 
     const result = await runBenchmark(options);
 
     expect(result.accuracy).toEqual({ recallAt1: 1, recallAt5: 1, mrr: 1 });
-    expect(fakeModel.tokenizer).toHaveBeenCalledWith(Object.values(captions), {
-      padding: true,
-      truncation: true,
-    });
-    expect(fakeModel.processor.mock.calls.map(([batch]) => batch.length)).toEqual([8, 2]);
+    // Like a search query, each caption is tokenized alone, so none is padded
+    const tokenized = fakeModel.tokenizer.mock.calls.map(([texts]) => texts);
+    expect(tokenized.every((texts) => texts.length === 1)).toBe(true);
+    expect(tokenized.flat()).toEqual(expect.arrayContaining(Object.values(captions)));
+    // Image batches, then one image to pair with each caption
+    expect(fakeModel.processor.mock.calls.map(([batch]) => batch.length)).toEqual([8, 2, 1]);
   });
 
   it('reports its progress', async () => {

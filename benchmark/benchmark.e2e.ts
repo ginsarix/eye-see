@@ -21,13 +21,13 @@ async function waitForBenchmark(dtype: Dtype): Promise<Finished> {
   const deadline = Date.now() + DTYPE_TIMEOUT_MS;
   let lastProgress = '';
   while (Date.now() < deadline) {
-    const status = await browser.execute(
-      () =>
-        (window as BenchmarkWindow).__eyeSeeBenchmark?.status() ?? {
-          state: 'error' as const,
-          error: 'The benchmark hook disappeared',
-        },
+    // Sent as JSON: the embedded driver treats a returned object with an
+    // `error` key as a script failure, which an error status would trip
+    const json = await browser.execute(() =>
+      JSON.stringify((window as BenchmarkWindow).__eyeSeeBenchmark?.status() ?? null),
     );
+    const status = JSON.parse(json) as BenchmarkStatus | null;
+    if (!status) return { state: 'error', error: 'The benchmark hook disappeared (the page reloaded)' };
     if (status.state === 'done' || status.state === 'error') return status;
     if (status.state === 'running' && status.progress !== lastProgress) {
       lastProgress = status.progress;
@@ -39,7 +39,13 @@ async function waitForBenchmark(dtype: Dtype): Promise<Finished> {
 }
 
 async function benchmarkDtype(dtype: Dtype): Promise<Finished> {
-  // A fresh page releases the previous dtype's ONNX session and GPU memory
+  // A fresh page releases the previous dtype's ONNX session and GPU memory.
+  // This driver's refresh only calls location.reload() without waiting, so the
+  // old page's hook is removed first: otherwise the wait below could find it
+  // and start the run on a page that is about to unload.
+  await browser.execute(() => {
+    delete (window as BenchmarkWindow).__eyeSeeBenchmark;
+  });
   await browser.refresh();
   await browser.waitUntil(
     () => browser.execute(() => Boolean((window as BenchmarkWindow).__eyeSeeBenchmark)),

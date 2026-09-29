@@ -1,4 +1,4 @@
-import { cos_sim } from '@huggingface/transformers';
+import { cos_sim, type RawImage } from '@huggingface/transformers';
 import { BATCH_SIZES } from '../atoms/batch-size';
 import { getPrepareMs, loadModel, model, type ModelDtype } from './clip';
 import { listImageFiles, loadImage } from './images';
@@ -143,26 +143,35 @@ async function measureAccuracy(dir: string, captions: Record<string, string>): P
 
   const files = await listImageFiles(dir);
   const texts = files.map((file) => captions[file.name]);
-  const tokenize = (batch: string[]) => loaded.tokenizer(batch, { padding: true, truncation: true });
-  // The combined CLIP model needs text with every call, but the caption
-  // embeddings only have to come from the first one
-  const allTexts = tokenize(texts);
-  const oneText = tokenize(texts.slice(0, 1));
+  // Each caption is tokenized alone, like a search query. Padding captions to a
+  // shared length changes the text embeddings, badly so at fp16.
+  const tokenize = (text: string) => loaded.tokenizer([text], { padding: true, truncation: true });
 
-  let textEmbeddings: number[][] | undefined;
+  // The combined CLIP model needs text and images in every call, so image
+  // batches carry one caption and captions carry one image
+  const anyText = tokenize(texts[0]);
   const imageEmbeddings: number[][] = [];
+  let firstImage: RawImage | undefined;
   for (let i = 0; i < files.length; i += ACCURACY_BATCH_SIZE) {
     const images = [];
     for (const file of files.slice(i, i + ACCURACY_BATCH_SIZE)) {
       images.push(await loadImage(file.path));
     }
-    const imageInputs = await loaded.processor(images);
-    const outputs = await loaded.model({ ...(textEmbeddings ? oneText : allTexts), ...imageInputs });
-    textEmbeddings ??= texts.map((_, t) => outputs.text_embeds[t].data);
+    firstImage ??= images[0];
+    const outputs = await loaded.model({ ...anyText, ...(await loaded.processor(images)) });
     for (let j = 0; j < images.length; j++) imageEmbeddings.push(outputs.image_embeds[j].data);
   }
 
-  const similarity = (textEmbeddings ?? []).map((text) =>
+  const textEmbeddings: number[][] = [];
+  if (firstImage) {
+    const oneImage = await loaded.processor([firstImage]);
+    for (const text of texts) {
+      const outputs = await loaded.model({ ...tokenize(text), ...oneImage });
+      textEmbeddings.push(outputs.text_embeds[0].data);
+    }
+  }
+
+  const similarity = textEmbeddings.map((text) =>
     imageEmbeddings.map((image) => cos_sim(text, image)),
   );
   return retrievalAccuracy(similarity);
