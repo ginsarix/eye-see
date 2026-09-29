@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEVICES, DTYPES, parseList } from './options.ts';
+import { DTYPES, parseList } from './options.ts';
 
 describe('parseList', () => {
   it('defaults to every value', () => {
@@ -11,12 +11,12 @@ describe('parseList', () => {
   });
 
   it('rejects unknown values', () => {
-    expect(() => parseList('cpu', DEVICES, 'devices')).toThrow(
-      '--devices must be a comma-separated list of webgpu, wasm; got "cpu"',
+    expect(() => parseList('int16', DTYPES, 'dtypes')).toThrow(
+      '--dtypes must be a comma-separated list of fp32, fp16, q4f16, q8, q4, bnb4; got "int16"',
     );
   });
 
   it('rejects an empty list', () => {
-    expect(() => parseList(',', DEVICES, 'devices')).toThrow('--devices must be');
+    expect(() => parseList(',', DTYPES, 'dtypes')).toThrow('--dtypes must be');
   });
 });

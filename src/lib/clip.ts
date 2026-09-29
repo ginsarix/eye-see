@@ -49,14 +49,9 @@ function setModelLoadState(state: ModelLoadState) {
 // out the download, which depends on the network and the cache.
 let prepareStartedAt: number | undefined;
 let prepareMs: number | null = null;
-let modelDevice: 'webgpu' | 'wasm' | undefined;
 
 export function getPrepareMs() {
   return prepareMs;
-}
-
-export function getModelDevice() {
-  return modelDevice;
 }
 
 function finishPrepare() {
@@ -101,12 +96,11 @@ async function pickDevice(): Promise<'webgpu' | 'wasm'> {
   return 'wasm';
 }
 
-// Benchmarks pin the device instead of falling back, so a run never silently
-// measures a different device than the one it asked for.
-async function pickBenchmarkDevice(): Promise<'webgpu' | 'wasm'> {
-  const device = import.meta.env.BENCHMARK_MODEL_DEVICE || 'webgpu';
-  if (device === 'wasm' || (device === 'webgpu' && (await hasWebGPUAdapter()))) return device;
-  throw new Error(`Model device "${device}" is unavailable`);
+// Benchmarks only measure WebGPU (WASM is the app's compatibility fallback), so
+// they fail rather than silently measure WASM.
+async function pickBenchmarkDevice(): Promise<'webgpu'> {
+  if (await hasWebGPUAdapter()) return 'webgpu';
+  throw new Error("WebGPU is unavailable, and benchmarks don't fall back to WASM");
 }
 
 export async function loadModel(dtype: ModelDtype = 'fp32') {
@@ -116,7 +110,6 @@ export async function loadModel(dtype: ModelDtype = 'fp32') {
   try {
     const device =
       import.meta.env.IS_BENCHMARK_MODE === 'true' ? await pickBenchmarkDevice() : await pickDevice();
-    modelDevice = device;
     model = {
       processor: await AutoProcessor.from_pretrained(modelId),
       tokenizer: await AutoTokenizer.from_pretrained(modelId),

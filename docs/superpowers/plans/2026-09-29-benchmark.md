@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-29-benchmark-design.md`
 
+> **Revision (2026-09-29, after a WASM smoke run):** WASM runs single-threaded in the app's webview (it isn't cross-origin isolated) and was far too slow to be a real option, so it stays only as the app's compatibility fallback and **the device dimension is removed**. The benchmark measures dtypes × batch sizes on **WebGPU only**: `BENCHMARK_MODEL_DEVICE`, its Vite check and `--devices` are gone; benchmark mode always requires WebGPU and fails without an adapter; there is one build and one WebdriverIO run; the report has one summary table and one speed table with no device column; `clip.ts` no longer exports `getModelDevice()` (the hook always reports the WebGPU adapter). Sections below that mention devices or WASM describe the original design.
+
 ## Global Constraints
 
 - Package manager: `pnpm` (never npm).

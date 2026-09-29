@@ -27,7 +27,6 @@ vi.mock('./clip', () => ({
   },
   loadModel: vi.fn(async () => undefined),
   getPrepareMs: vi.fn(() => 250),
-  getModelDevice: vi.fn(() => 'wasm'),
 }));
 
 vi.mock('./images', () => ({ listImageFiles: vi.fn(), loadImage: vi.fn() }));
@@ -152,6 +151,22 @@ describe('runBenchmark', () => {
     expect(result.prepareMs).toBe(250);
     expect(result.loadMs).toBeGreaterThanOrEqual(0);
     expect(result.adapter).toBeNull();
+  });
+
+  it('reports the WebGPU adapter', async () => {
+    const info = { vendor: 'apple', architecture: 'metal-3', description: '', device: '' };
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: vi.fn().mockResolvedValue({ info }) },
+      configurable: true,
+    });
+
+    try {
+      const result = await runBenchmark(options);
+
+      expect(result.adapter).toEqual({ vendor: 'apple', architecture: 'metal-3', description: '' });
+    } finally {
+      Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });
+    }
   });
 
   it('runs every batch size, leaving out the warm-ups', async () => {

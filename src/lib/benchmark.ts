@@ -1,6 +1,6 @@
 import { cos_sim } from '@huggingface/transformers';
 import { BATCH_SIZES } from '../atoms/batch-size';
-import { getModelDevice, getPrepareMs, loadModel, model, type ModelDtype } from './clip';
+import { getPrepareMs, loadModel, model, type ModelDtype } from './clip';
 import { listImageFiles, loadImage } from './images';
 import { getSimilarImages, type SearchTimings } from './similarity';
 
@@ -169,7 +169,6 @@ async function measureAccuracy(dir: string, captions: Record<string, string>): P
 }
 
 async function getAdapterInfo(): Promise<AdapterInfo | null> {
-  if (getModelDevice() !== 'webgpu') return null;
   const gpu = (
     navigator as Navigator & {
       gpu?: { requestAdapter(): Promise<{ info?: AdapterInfo } | null> };

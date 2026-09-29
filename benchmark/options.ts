@@ -3,9 +3,6 @@ import type { ModelDtype } from '../src/lib/clip';
 // Shared by the runner and the WebdriverIO spec. Node runs these files directly,
 // so they may only import types from src/.
 
-export const DEVICES = ['webgpu', 'wasm'] as const;
-export type Device = (typeof DEVICES)[number];
-
 export const DTYPES = ['fp32', 'fp16', 'q4f16', 'q8', 'q4', 'bnb4'] as const satisfies readonly ModelDtype[];
 export type Dtype = (typeof DTYPES)[number];
 

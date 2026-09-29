@@ -187,15 +187,6 @@ describe('clip', () => {
     );
   });
 
-  it('records the device it picked', async () => {
-    const clip = await importClip();
-    expect(clip.getModelDevice()).toBeUndefined();
-
-    await clip.loadModel();
-
-    expect(clip.getModelDevice()).toBe('wasm');
-  });
-
   it('measures session creation from the weights finishing to ready', async () => {
     let now = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => now);
@@ -225,7 +216,7 @@ describe('clip', () => {
       vi.stubEnv('IS_BENCHMARK_MODE', 'true');
     });
 
-    it('defaults to WebGPU', async () => {
+    it('uses WebGPU', async () => {
       setGpu({ requestAdapter: vi.fn().mockResolvedValue({}) });
       const clip = await importClip();
 
@@ -237,35 +228,16 @@ describe('clip', () => {
       );
     });
 
-    it('requires WebGPU by default', async () => {
-      const clip = await importClip();
-
-      await expect(clip.loadModel()).rejects.toThrow('Model device "webgpu" is unavailable');
-    });
-
-    it('uses the device from BENCHMARK_MODEL_DEVICE', async () => {
-      vi.stubEnv('BENCHMARK_MODEL_DEVICE', 'wasm');
-      setGpu({ requestAdapter: vi.fn().mockResolvedValue({}) });
-      const clip = await importClip();
-
-      await clip.loadModel();
-
-      expect(CLIPModel.from_pretrained).toHaveBeenCalledWith(
-        'Xenova/clip-vit-base-patch32',
-        expect.objectContaining({ device: 'wasm' }),
-      );
-    });
-
     it.each([
-      ['WebGPU without an adapter', 'webgpu', { requestAdapter: vi.fn().mockResolvedValue(null) }],
-      ['WebGPU when it is missing', 'webgpu', undefined],
-      ['an unknown device', 'cuda', { requestAdapter: vi.fn().mockResolvedValue({}) }],
-    ])('fails instead of falling back for %s', async (_, device, gpu) => {
-      vi.stubEnv('BENCHMARK_MODEL_DEVICE', device);
+      ['has no adapter', { requestAdapter: vi.fn().mockResolvedValue(null) }],
+      ['is missing', undefined],
+    ])('fails instead of falling back to WASM when WebGPU %s', async (_, gpu) => {
       setGpu(gpu);
       const clip = await importClip();
 
-      await expect(clip.loadModel()).rejects.toThrow(`Model device "${device}" is unavailable`);
+      await expect(clip.loadModel()).rejects.toThrow(
+        "WebGPU is unavailable, and benchmarks don't fall back to WASM",
+      );
 
       expect(clip.modelLoadState).toEqual({ status: 'error' });
       expect(CLIPModel.from_pretrained).not.toHaveBeenCalled();
