@@ -218,14 +218,25 @@ describe('clip', () => {
     expectLoadedWith(VisionModel, { device: 'wasm' });
   });
 
-  it('loads fp16 vision with fp32 text by default on WebGPU', async () => {
-    setGpu({ requestAdapter: vi.fn().mockResolvedValue({}) });
+  it('loads fp16 vision with fp32 text by default on WebGPU with shader-f16', async () => {
+    setGpu({ requestAdapter: vi.fn().mockResolvedValue({ features: new Set(['shader-f16']) }) });
     const clip = await importClip();
 
     await clip.loadModel();
 
-    expectLoadedWith(TextModel, { dtype: 'fp32' });
-    expectLoadedWith(VisionModel, { dtype: 'fp16' });
+    expectLoadedWith(TextModel, { dtype: 'fp32', device: 'webgpu' });
+    expectLoadedWith(VisionModel, { dtype: 'fp16', device: 'webgpu' });
+  });
+
+  it('keeps vision at fp32 by default on WebGPU without shader-f16', async () => {
+    // transformers.js refuses fp16 on such adapters, which would fail the whole load
+    setGpu({ requestAdapter: vi.fn().mockResolvedValue({ features: new Set() }) });
+    const clip = await importClip();
+
+    await clip.loadModel();
+
+    expectLoadedWith(TextModel, { dtype: 'fp32', device: 'webgpu' });
+    expectLoadedWith(VisionModel, { dtype: 'fp32', device: 'webgpu' });
   });
 
   it('loads both models at fp32 by default on the WASM fallback', async () => {

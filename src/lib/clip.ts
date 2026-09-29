@@ -105,13 +105,26 @@ function onProgress(info: ProgressInfo) {
   setModelLoadState({ status: 'downloading', progress });
 }
 
-async function hasWebGPUAdapter() {
-  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+type WebGPUAdapter = { features?: ReadonlySet<string> };
+
+async function requestWebGPUAdapter(): Promise<WebGPUAdapter | null> {
+  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<WebGPUAdapter | null> } })
+    .gpu;
   try {
-    return Boolean(gpu && (await gpu.requestAdapter()));
+    return (await gpu?.requestAdapter()) ?? null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function hasWebGPUAdapter() {
+  return (await requestWebGPUAdapter()) !== null;
+}
+
+// transformers.js refuses fp16 on WebGPU adapters without shader-f16, which
+// would fail the whole load
+async function webGPUSupportsFp16() {
+  return (await requestWebGPUAdapter())?.features?.has('shader-f16') ?? false;
 }
 
 // WebGPU availability depends on the platform webview (e.g. WebKitGTK on Linux
@@ -132,9 +145,9 @@ async function pickBenchmarkDevice(): Promise<'webgpu'> {
 // The text model always runs at fp32: on WebGPU its fp16 variant produces
 // embeddings unrelated to fp32's, while the vision model's fp16 variant matches.
 // Text is also embedded once per search, so its precision costs little.
-// By default the vision model runs at fp16 on WebGPU, which benchmarked about a
-// third faster than fp32 at the same accuracy. fp16's speed on the WASM fallback
-// is unmeasured, so it stays fp32 there.
+// By default the vision model runs at fp16 on WebGPU adapters that support it,
+// which benchmarked about a third faster than fp32 at the same accuracy (on an
+// Apple M3). fp16's speed on the WASM fallback is unmeasured, so it stays fp32.
 export async function loadModel(visionDtype?: ModelDtype) {
   setModelLoadState({ status: 'downloading', progress: null });
   prepareStartedAt = undefined;
@@ -143,6 +156,7 @@ export async function loadModel(visionDtype?: ModelDtype) {
   try {
     const device =
       import.meta.env.IS_BENCHMARK_MODE === 'true' ? await pickBenchmarkDevice() : await pickDevice();
+    const defaultVisionDtype = device === 'webgpu' && (await webGPUSupportsFp16()) ? 'fp16' : 'fp32';
     const processor = await AutoProcessor.from_pretrained(modelId);
     const tokenizer = await AutoTokenizer.from_pretrained(modelId);
     const [textModel, visionModel] = await Promise.all([
@@ -152,7 +166,7 @@ export async function loadModel(visionDtype?: ModelDtype) {
         progress_callback: onProgress,
       }),
       CLIPVisionModelWithProjection.from_pretrained(modelId, {
-        dtype: visionDtype ?? (device === 'webgpu' ? 'fp16' : 'fp32'),
+        dtype: visionDtype ?? defaultVisionDtype,
         device,
         progress_callback: onProgress,
       }),
