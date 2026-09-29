@@ -21,19 +21,46 @@ export interface SimilarityFinalResult {
   files: string[];
 }
 
+// Milliseconds spent in each stage of a search, for the benchmark
+export interface SearchTimings {
+  listMs: number;
+  decodeMs: number;
+  preprocessMs: number;
+  inferenceMs: number;
+}
+
+// Adds how long `fn` takes to `timings[stage]`, when timings are being collected
+async function timed<T>(
+  timings: SearchTimings | undefined,
+  stage: keyof SearchTimings,
+  fn: () => T,
+): Promise<Awaited<T>> {
+  const startedAt = performance.now();
+  try {
+    return await fn();
+  } finally {
+    if (timings) timings[stage] += performance.now() - startedAt;
+  }
+}
+
 export async function* getSimilarImages(
   query: string,
   dir: string,
   batchSize: number,
   includeSubdirectories = false,
+  timings?: SearchTimings,
 ): AsyncGenerator<SimilarityProgress, SimilarityFinalResult, unknown> {
   await waitModelLoad();
 
-  if (!model) {
+  // A local copy keeps the narrowing inside the timed closures below
+  const loaded = model;
+  if (!loaded) {
     return { results: [], filesProcessed: 0, files: [] };
   }
 
-  const imageFiles = await listImageFiles(dir, includeSubdirectories);
+  const imageFiles = await timed(timings, 'listMs', () =>
+    listImageFiles(dir, includeSubdirectories),
+  );
   const files = imageFiles.map((file) => file.name);
 
   if (imageFiles.length === 0) {
@@ -43,7 +70,7 @@ export async function* getSimilarImages(
   yield { filesProcessed: 0, files };
 
   // Get text embedding
-  const textInputs = model.tokenizer([query], { padding: true, truncation: true });
+  const textInputs = loaded.tokenizer([query], { padding: true, truncation: true });
 
   // Decode and process images one batch at a time, so only a batch is in memory
   const allResults: SimilarityMatch[] = [];
@@ -51,20 +78,27 @@ export async function* getSimilarImages(
   let textEmbedding: Float32Array | number[] | undefined;
 
   for (let i = 0; i < imageFiles.length; i += batchSize) {
-    const batch: { file: (typeof imageFiles)[number]; image: RawImage }[] = [];
-    for (const file of imageFiles.slice(i, i + batchSize)) {
-      try {
-        batch.push({ file, image: await loadImage(file.path) });
-      } catch (error) {
-        console.warn(`Skipping image "${file.name}": could not decode`, error);
+    const batch = await timed(timings, 'decodeMs', async () => {
+      const decoded: { file: (typeof imageFiles)[number]; image: RawImage }[] = [];
+      for (const file of imageFiles.slice(i, i + batchSize)) {
+        try {
+          decoded.push({ file, image: await loadImage(file.path) });
+        } catch (error) {
+          console.warn(`Skipping image "${file.name}": could not decode`, error);
+        }
       }
-    }
+      return decoded;
+    });
 
     if (batch.length > 0) {
-      const imageInputs = await model.processor(batch.map((d) => d.image));
+      const imageInputs = await timed(timings, 'preprocessMs', () =>
+        loaded.processor(batch.map((d) => d.image)),
+      );
 
       // Run model with both text and image inputs
-      const outputs = await model.model({ ...textInputs, ...imageInputs });
+      const outputs = await timed(timings, 'inferenceMs', () =>
+        loaded.model({ ...textInputs, ...imageInputs }),
+      );
 
       // Get text embedding from first batch (it's the same for all)
       if (!textEmbedding) {

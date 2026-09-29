@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RawImage } from '@huggingface/transformers';
 import { listImageFiles, loadImage } from './images';
-import { getSimilarImages } from './similarity';
+import { getSimilarImages, type SearchTimings } from './similarity';
 
 const clip = vi.hoisted(() => ({ model: undefined as unknown }));
 
@@ -60,6 +60,29 @@ describe('getSimilarImages', () => {
     vi.mocked(loadImage).mockReset();
     fakeModel = createFakeModel();
     clip.model = fakeModel;
+  });
+
+  it('adds how long each stage takes to the timings it is given', async () => {
+    mockImages({ a: 0.1, b: 0.2, c: 0.3 });
+    // Every clock read advances 10ms, so each timed stage takes exactly 10ms
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += 10));
+    const timings: SearchTimings = { listMs: 0, decodeMs: 0, preprocessMs: 0, inferenceMs: 0 };
+
+    await collect(getSimilarImages('cat', '/d', 2, false, timings));
+
+    // One listing, then two batches (a+b, c) of decode, preprocess and inference
+    expect(timings).toEqual({ listMs: 10, decodeMs: 20, preprocessMs: 20, inferenceMs: 20 });
+  });
+
+  it('returns the same results whether or not it is timed', async () => {
+    mockImages({ a: 0.1, b: 0.2, c: 0.3 });
+    const timings: SearchTimings = { listMs: 0, decodeMs: 0, preprocessMs: 0, inferenceMs: 0 };
+
+    const untimed = await collect(getSimilarImages('cat', '/d', 2));
+    const timed = await collect(getSimilarImages('cat', '/d', 2, false, timings));
+
+    expect(timed).toEqual(untimed);
   });
 
   it('returns no results when the model failed to load', async () => {
