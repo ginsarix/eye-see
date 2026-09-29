@@ -132,7 +132,10 @@ async function pickBenchmarkDevice(): Promise<'webgpu'> {
 // The text model always runs at fp32: on WebGPU its fp16 variant produces
 // embeddings unrelated to fp32's, while the vision model's fp16 variant matches.
 // Text is also embedded once per search, so its precision costs little.
-export async function loadModel(visionDtype: ModelDtype = 'fp32') {
+// By default the vision model runs at fp16 on WebGPU, which benchmarked about a
+// third faster than fp32 at the same accuracy. fp16's speed on the WASM fallback
+// is unmeasured, so it stays fp32 there.
+export async function loadModel(visionDtype?: ModelDtype) {
   setModelLoadState({ status: 'downloading', progress: null });
   prepareStartedAt = undefined;
   prepareMs = null;
@@ -149,7 +152,7 @@ export async function loadModel(visionDtype: ModelDtype = 'fp32') {
         progress_callback: onProgress,
       }),
       CLIPVisionModelWithProjection.from_pretrained(modelId, {
-        dtype: visionDtype,
+        dtype: visionDtype ?? (device === 'webgpu' ? 'fp16' : 'fp32'),
         device,
         progress_callback: onProgress,
       }),

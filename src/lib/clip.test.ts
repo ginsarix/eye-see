@@ -218,22 +218,33 @@ describe('clip', () => {
     expectLoadedWith(VisionModel, { device: 'wasm' });
   });
 
-  it('loads both models at fp32 by default', async () => {
+  it('loads fp16 vision with fp32 text by default on WebGPU', async () => {
+    setGpu({ requestAdapter: vi.fn().mockResolvedValue({}) });
     const clip = await importClip();
 
     await clip.loadModel();
 
     expectLoadedWith(TextModel, { dtype: 'fp32' });
-    expectLoadedWith(VisionModel, { dtype: 'fp32' });
+    expectLoadedWith(VisionModel, { dtype: 'fp16' });
+  });
+
+  it('loads both models at fp32 by default on the WASM fallback', async () => {
+    const clip = await importClip();
+
+    await clip.loadModel();
+
+    expectLoadedWith(TextModel, { dtype: 'fp32', device: 'wasm' });
+    expectLoadedWith(VisionModel, { dtype: 'fp32', device: 'wasm' });
   });
 
   it('loads the vision model with the requested dtype and keeps text at fp32', async () => {
+    setGpu({ requestAdapter: vi.fn().mockResolvedValue({}) });
     const clip = await importClip();
 
-    await clip.loadModel('fp16');
+    await clip.loadModel('q4');
 
     expectLoadedWith(TextModel, { dtype: 'fp32' });
-    expectLoadedWith(VisionModel, { dtype: 'fp16' });
+    expectLoadedWith(VisionModel, { dtype: 'q4' });
   });
 
   it('measures session creation from both weight files finishing to ready', async () => {
