@@ -1,7 +1,8 @@
 import {
   AutoProcessor,
   AutoTokenizer,
-  CLIPModel,
+  CLIPTextModelWithProjection,
+  CLIPVisionModelWithProjection,
   PreTrainedTokenizer,
   Processor,
 } from '@huggingface/transformers';
@@ -10,11 +11,14 @@ const modelId = 'Xenova/clip-vit-base-patch32';
 
 export type ModelDtype = 'fp32' | 'fp16' | 'q4f16' | 'q8' | 'q4' | 'bnb4';
 
+// Text and images go through separate models, so a query is embedded once per
+// search, and the vision model's dtype can differ from the text model's.
 export let model:
   | {
       processor: Processor;
       tokenizer: PreTrainedTokenizer;
-      model: CLIPModel;
+      textModel: CLIPTextModelWithProjection;
+      visionModel: CLIPVisionModelWithProjection;
     }
   | undefined;
 
@@ -45,10 +49,14 @@ function setModelLoadState(state: ModelLoadState) {
 }
 
 // Session creation (and shader compilation on WebGPU) starts once the weights
-// have arrived, so it's timed from the .onnx file's `done` event. That leaves
-// out the download, which depends on the network and the cache.
+// have arrived, so it's timed from the last .onnx file's `done` event. That
+// leaves out the download, which depends on the network and the cache.
 let prepareStartedAt: number | undefined;
 let prepareMs: number | null = null;
+
+// One .onnx weight file each for the text and vision models
+const WEIGHT_FILES = 2;
+let downloads = new Map<string, { loaded: number; total: number; done: boolean }>();
 
 export function getPrepareMs() {
   return prepareMs;
@@ -59,24 +67,42 @@ function finishPrepare() {
 }
 
 type ProgressInfo = Parameters<
-  NonNullable<NonNullable<Parameters<typeof CLIPModel.from_pretrained>[1]>['progress_callback']>
+  NonNullable<
+    NonNullable<Parameters<typeof CLIPTextModelWithProjection.from_pretrained>[1]>['progress_callback']
+  >
 >[0];
 
-// Only the .onnx weights are tracked: they are nearly the whole download, and
-// other files' sizes are only known once they start, which would make a summed
-// bar jump backwards.
+// Only the .onnx weights are tracked: they are nearly the whole download. The
+// percentage covers both weight files, and only appears once both sizes are
+// known (or a file finished, e.g. from the cache), so it never jumps backwards.
 function onProgress(info: ProgressInfo) {
   if (!('file' in info) || !info.file.endsWith('.onnx')) return;
+  const download = downloads.get(info.file) ?? { loaded: 0, total: 0, done: false };
 
   if (info.status === 'progress' && info.total > 0) {
-    const progress = Math.floor(info.progress);
-    // Skip per-chunk updates that don't change the displayed percentage
-    if (modelLoadState.status === 'downloading' && modelLoadState.progress === progress) return;
-    setModelLoadState({ status: 'downloading', progress });
+    downloads.set(info.file, { ...download, loaded: info.loaded, total: info.total });
   } else if (info.status === 'done') {
+    downloads.set(info.file, { ...download, done: true });
+  } else {
+    return;
+  }
+
+  const files = [...downloads.values()];
+  if (files.length < WEIGHT_FILES) return;
+
+  if (files.every((file) => file.done)) {
     prepareStartedAt = performance.now();
     setModelLoadState({ status: 'preparing' });
+    return;
   }
+
+  const loaded = files.reduce((sum, file) => sum + file.loaded, 0);
+  const total = files.reduce((sum, file) => sum + file.total, 0);
+  if (total === 0) return;
+  const progress = Math.floor((loaded / total) * 100);
+  // Skip per-chunk updates that don't change the displayed percentage
+  if (modelLoadState.status === 'downloading' && modelLoadState.progress === progress) return;
+  setModelLoadState({ status: 'downloading', progress });
 }
 
 async function hasWebGPUAdapter() {
@@ -103,21 +129,36 @@ async function pickBenchmarkDevice(): Promise<'webgpu'> {
   throw new Error("WebGPU is unavailable, and benchmarks don't fall back to WASM");
 }
 
-export async function loadModel(dtype: ModelDtype = 'fp32') {
+// The text model always runs at fp32: on WebGPU its fp16 variant produces
+// embeddings unrelated to fp32's, while the vision model's fp16 variant matches.
+// Text is also embedded once per search, so its precision costs little.
+export async function loadModel(visionDtype: ModelDtype = 'fp32') {
   setModelLoadState({ status: 'downloading', progress: null });
   prepareStartedAt = undefined;
   prepareMs = null;
+  downloads = new Map();
   try {
     const device =
       import.meta.env.IS_BENCHMARK_MODE === 'true' ? await pickBenchmarkDevice() : await pickDevice();
-    model = {
-      processor: await AutoProcessor.from_pretrained(modelId),
-      tokenizer: await AutoTokenizer.from_pretrained(modelId),
-      model: (await CLIPModel.from_pretrained(modelId, {
-        dtype,
+    const processor = await AutoProcessor.from_pretrained(modelId);
+    const tokenizer = await AutoTokenizer.from_pretrained(modelId);
+    const [textModel, visionModel] = await Promise.all([
+      CLIPTextModelWithProjection.from_pretrained(modelId, {
+        dtype: 'fp32',
         device,
         progress_callback: onProgress,
-      })) as CLIPModel,
+      }),
+      CLIPVisionModelWithProjection.from_pretrained(modelId, {
+        dtype: visionDtype,
+        device,
+        progress_callback: onProgress,
+      }),
+    ]);
+    model = {
+      processor,
+      tokenizer,
+      textModel: textModel as CLIPTextModelWithProjection,
+      visionModel: visionModel as CLIPVisionModelWithProjection,
     };
     finishPrepare();
     setModelLoadState({ status: 'ready' });

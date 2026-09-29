@@ -1,4 +1,4 @@
-import { cos_sim, type RawImage } from '@huggingface/transformers';
+import { cos_sim } from '@huggingface/transformers';
 import { BATCH_SIZES } from '../atoms/batch-size';
 import { getPrepareMs, loadModel, model, type ModelDtype } from './clip';
 import { listImageFiles, loadImage } from './images';
@@ -142,33 +142,23 @@ async function measureAccuracy(dir: string, captions: Record<string, string>): P
   if (!loaded) throw new Error('The model is not loaded');
 
   const files = await listImageFiles(dir);
-  const texts = files.map((file) => captions[file.name]);
-  // Each caption is tokenized alone, like a search query. Padding captions to a
-  // shared length changes the text embeddings, badly so at fp16.
-  const tokenize = (text: string) => loaded.tokenizer([text], { padding: true, truncation: true });
 
-  // The combined CLIP model needs text and images in every call, so image
-  // batches carry one caption and captions carry one image
-  const anyText = tokenize(texts[0]);
   const imageEmbeddings: number[][] = [];
-  let firstImage: RawImage | undefined;
   for (let i = 0; i < files.length; i += ACCURACY_BATCH_SIZE) {
     const images = [];
     for (const file of files.slice(i, i + ACCURACY_BATCH_SIZE)) {
       images.push(await loadImage(file.path));
     }
-    firstImage ??= images[0];
-    const outputs = await loaded.model({ ...anyText, ...(await loaded.processor(images)) });
-    for (let j = 0; j < images.length; j++) imageEmbeddings.push(outputs.image_embeds[j].data);
+    const { image_embeds } = await loaded.visionModel(await loaded.processor(images));
+    for (let j = 0; j < images.length; j++) imageEmbeddings.push(image_embeds[j].data);
   }
 
+  // Each caption is embedded alone, like a search query, so none is padded
   const textEmbeddings: number[][] = [];
-  if (firstImage) {
-    const oneImage = await loaded.processor([firstImage]);
-    for (const text of texts) {
-      const outputs = await loaded.model({ ...tokenize(text), ...oneImage });
-      textEmbeddings.push(outputs.text_embeds[0].data);
-    }
+  for (const file of files) {
+    const inputs = loaded.tokenizer([captions[file.name]], { padding: true, truncation: true });
+    const { text_embeds } = await loaded.textModel(inputs);
+    textEmbeddings.push(text_embeds[0].data);
   }
 
   const similarity = textEmbeddings.map((text) =>

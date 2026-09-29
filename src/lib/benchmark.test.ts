@@ -54,12 +54,12 @@ function createFakeModel() {
   return {
     tokenizer: vi.fn((texts: string[]) => ({ input_ids: texts })),
     processor: vi.fn(async (images: { label: string }[]) => ({ pixel_values: images })),
-    model: vi.fn(
-      async ({ input_ids, pixel_values }: { input_ids: string[]; pixel_values: { label: string }[] }) => ({
-        text_embeds: input_ids.map((text) => ({ data: [text] })),
-        image_embeds: pixel_values.map((image) => ({ data: [image.label] })),
-      }),
-    ),
+    textModel: vi.fn(async ({ input_ids }: { input_ids: string[] }) => ({
+      text_embeds: input_ids.map((text) => ({ data: [text] })),
+    })),
+    visionModel: vi.fn(async ({ pixel_values }: { pixel_values: { label: string }[] }) => ({
+      image_embeds: pixel_values.map((image) => ({ data: [image.label] })),
+    })),
   };
 }
 
@@ -188,12 +188,12 @@ describe('runBenchmark', () => {
     const result = await runBenchmark(options);
 
     expect(result.accuracy).toEqual({ recallAt1: 1, recallAt5: 1, mrr: 1 });
-    // Like a search query, each caption is tokenized alone, so none is padded
-    const tokenized = fakeModel.tokenizer.mock.calls.map(([texts]) => texts);
-    expect(tokenized.every((texts) => texts.length === 1)).toBe(true);
-    expect(tokenized.flat()).toEqual(expect.arrayContaining(Object.values(captions)));
-    // Image batches, then one image to pair with each caption
-    expect(fakeModel.processor.mock.calls.map(([batch]) => batch.length)).toEqual([8, 2, 1]);
+    // Like a search query, each caption is embedded alone, so none is padded
+    expect(fakeModel.textModel.mock.calls.map(([inputs]) => inputs.input_ids)).toEqual(
+      Object.values(captions).map((caption) => [caption]),
+    );
+    expect(fakeModel.processor.mock.calls.map(([batch]) => batch.length)).toEqual([8, 2]);
+    expect(fakeModel.visionModel).toHaveBeenCalledTimes(2);
   });
 
   it('reports its progress', async () => {
