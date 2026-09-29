@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework", "@wdio/tauri-service"]
+  },
+  "include": ["./**/*.ts", "../wdio.benchmark.conf.ts", "../wdio.conf.ts", "../src/vite-env.d.ts"]
+}

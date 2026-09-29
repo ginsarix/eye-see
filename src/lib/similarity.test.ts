@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RawImage } from '@huggingface/transformers';
 import { listImageFiles, loadImage } from './images';
-import { getSimilarImages } from './similarity';
+import { getSimilarImages, type SearchTimings } from './similarity';
 
 const clip = vi.hoisted(() => ({ model: undefined as unknown }));
 
@@ -24,11 +24,11 @@ type FakeImage = { score: number };
 function createFakeModel() {
   const tokenizer = vi.fn(() => ({ input_ids: 'tokens' }));
   const processor = vi.fn(async (images: FakeImage[]) => ({ pixel_values: images }));
-  const model = vi.fn(async ({ pixel_values }: { pixel_values: FakeImage[] }) => ({
-    text_embeds: [{ data: [1] }],
+  const textModel = vi.fn(async () => ({ text_embeds: [{ data: [1] }] }));
+  const visionModel = vi.fn(async ({ pixel_values }: { pixel_values: FakeImage[] }) => ({
     image_embeds: pixel_values.map((img) => ({ data: [img.score] })),
   }));
-  return { tokenizer, processor, model };
+  return { tokenizer, processor, textModel, visionModel };
 }
 
 // Scores of NaN make the fake decoder fail for that file
@@ -62,6 +62,43 @@ describe('getSimilarImages', () => {
     clip.model = fakeModel;
   });
 
+  it('adds how long each stage takes to the timings it is given', async () => {
+    mockImages({ a: 0.1, b: 0.2, c: 0.3 });
+    // Every clock read advances 10ms, so each timed stage takes exactly 10ms
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += 10));
+    const timings: SearchTimings = { listMs: 0, decodeMs: 0, preprocessMs: 0, inferenceMs: 0 };
+
+    await collect(getSimilarImages('cat', '/d', 2, false, timings));
+
+    // One listing, one query embedding, then two batches (a+b, c) of decode,
+    // preprocess and image inference
+    expect(timings).toEqual({ listMs: 10, decodeMs: 20, preprocessMs: 20, inferenceMs: 30 });
+  });
+
+  it('embeds the query once and runs only the vision model per batch', async () => {
+    mockImages({ a: 0.1, b: 0.2, c: 0.3 });
+
+    await collect(getSimilarImages('cat', '/d', 2));
+
+    expect(fakeModel.textModel).toHaveBeenCalledTimes(1);
+    expect(fakeModel.textModel).toHaveBeenCalledWith({ input_ids: 'tokens' });
+    expect(fakeModel.visionModel.mock.calls.map(([inputs]) => Object.keys(inputs))).toEqual([
+      ['pixel_values'],
+      ['pixel_values'],
+    ]);
+  });
+
+  it('returns the same results whether or not it is timed', async () => {
+    mockImages({ a: 0.1, b: 0.2, c: 0.3 });
+    const timings: SearchTimings = { listMs: 0, decodeMs: 0, preprocessMs: 0, inferenceMs: 0 };
+
+    const untimed = await collect(getSimilarImages('cat', '/d', 2));
+    const timed = await collect(getSimilarImages('cat', '/d', 2, false, timings));
+
+    expect(timed).toEqual(untimed);
+  });
+
   it('returns no results when the model failed to load', async () => {
     clip.model = undefined;
 
@@ -78,7 +115,8 @@ describe('getSimilarImages', () => {
     const { result } = await collect(getSimilarImages('cat', '/d', 2));
 
     expect(result).toEqual({ results: [], filesProcessed: 0, files: [] });
-    expect(fakeModel.model).not.toHaveBeenCalled();
+    expect(fakeModel.textModel).not.toHaveBeenCalled();
+    expect(fakeModel.visionModel).not.toHaveBeenCalled();
   });
 
   it('lists subdirectories only when asked to', async () => {
@@ -131,7 +169,7 @@ describe('getSimilarImages', () => {
     expect(result.results).toEqual([{ fileName: 'ok', path: '/d/ok', score: 0.4 }]);
     expect(yielded.at(-1)?.filesProcessed).toBe(3);
     // The last batch holds only a broken image, so the model isn't run for it
-    expect(fakeModel.model).toHaveBeenCalledTimes(1);
+    expect(fakeModel.visionModel).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('broken'), expect.any(Error));
   });
 

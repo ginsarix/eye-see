@@ -20,7 +20,8 @@ export default defineConfig({
       ignored: ['**/src-tauri/**'],
     },
   },
-  envPrefix: ['VITE_', 'TAURI_ENV_*'],
+  // The benchmark variable is listed whole so it keeps its name without a VITE_ prefix
+  envPrefix: ['VITE_', 'TAURI_ENV_*', 'IS_BENCHMARK_MODE'],
   build: {
     // Tauri uses Chromium on Windows and WebKit on macOS and Linux
     target: process.env.TAURI_ENV_PLATFORM == 'windows' ? 'chrome105' : 'safari16',
@@ -29,7 +30,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'benchmark/**/*.test.ts'],
     setupFiles: ['./src/test/setup.ts'],
   },
 });
