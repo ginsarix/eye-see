@@ -199,3 +199,39 @@ export async function runBenchmark(
 
   return { loadMs, prepareMs: getPrepareMs(), batchSizes, accuracy, adapter: await getAdapterInfo() };
 }
+
+export type BenchmarkStatus =
+  | { state: 'idle' }
+  | { state: 'running'; progress: string }
+  | { state: 'done'; result: BenchmarkResult }
+  | { state: 'error'; error: string };
+
+export interface BenchmarkHook {
+  start(options: BenchmarkOptions): void;
+  status(): BenchmarkStatus;
+}
+
+export type BenchmarkWindow = Window & { __eyeSeeBenchmark?: BenchmarkHook };
+
+// The benchmark's WebdriverIO spec drives this. `start` returns at once and the
+// spec polls `status`, since a run outlasts WebDriver's script timeout.
+export function installBenchmark() {
+  let status: BenchmarkStatus = { state: 'idle' };
+
+  (window as BenchmarkWindow).__eyeSeeBenchmark = {
+    start(options) {
+      if (status.state === 'running') throw new Error('A benchmark is already running');
+      status = { state: 'running', progress: 'starting' };
+      runBenchmark(options, (progress) => {
+        status = { state: 'running', progress };
+      })
+        .then((result) => {
+          status = { state: 'done', result };
+        })
+        .catch((error: unknown) => {
+          status = { state: 'error', error: error instanceof Error ? error.message : String(error) };
+        });
+    },
+    status: () => status,
+  };
+}

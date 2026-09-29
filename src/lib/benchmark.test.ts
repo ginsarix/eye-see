@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RawImage } from '@huggingface/transformers';
 import { loadModel } from './clip';
 import { listImageFiles, loadImage } from './images';
@@ -9,11 +9,13 @@ import {
   type SimilarityProgress,
 } from './similarity';
 import {
+  installBenchmark,
   median,
   retrievalAccuracy,
   runBenchmark,
   summarizeRuns,
   type BenchmarkOptions,
+  type BenchmarkWindow,
   type RunTimings,
 } from './benchmark';
 
@@ -214,5 +216,60 @@ describe('runBenchmark', () => {
     });
 
     await expect(runBenchmark(options)).rejects.toThrow('No images were searched in /d');
+  });
+});
+
+describe('installBenchmark', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clip.model = createFakeModel();
+    mockImages();
+    mockSearches();
+  });
+
+  afterEach(() => {
+    delete (window as BenchmarkWindow).__eyeSeeBenchmark;
+  });
+
+  function installHook() {
+    installBenchmark();
+    const hook = (window as BenchmarkWindow).__eyeSeeBenchmark;
+    if (!hook) throw new Error('The hook was not installed');
+    return hook;
+  }
+
+  it('starts idle, runs in the background and reports the result', async () => {
+    const hook = installHook();
+    expect(hook.status()).toEqual({ state: 'idle' });
+
+    hook.start(options);
+    expect(hook.status().state).toBe('running');
+
+    await vi.waitFor(() => expect(hook.status().state).toBe('done'));
+    const status = hook.status();
+    expect(status.state === 'done' && status.result.accuracy.recallAt1).toBe(1);
+  });
+
+  it('reports why the model failed to load', async () => {
+    vi.mocked(loadModel).mockRejectedValueOnce(new Error('Model device "webgpu" is unavailable'));
+    const hook = installHook();
+
+    hook.start(options);
+
+    await vi.waitFor(() =>
+      expect(hook.status()).toEqual({
+        state: 'error',
+        error: 'Model device "webgpu" is unavailable',
+      }),
+    );
+  });
+
+  it('refuses to start a second run while one is running', async () => {
+    const hook = installHook();
+
+    hook.start(options);
+
+    expect(() => hook.start(options)).toThrow('A benchmark is already running');
+    await vi.waitFor(() => expect(hook.status().state).toBe('done'));
   });
 });
