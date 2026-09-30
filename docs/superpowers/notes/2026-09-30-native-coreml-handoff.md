@@ -1,7 +1,7 @@
 # Handoff: native Core ML engine, and what a DirectML backend needs
 
 Date: 2026-09-30
-Branch: `feat/native-coreml` (macOS only, not pushed, not merged; kept as-is on purpose, since the spec says it isn't meant for `main` as-is)
+Branch: `feat/native-coreml` (macOS only; pushed to `origin`, not merged into `main` on purpose, since the spec says it isn't meant for `main` as-is)
 
 Read with:
 - the spec, `docs/superpowers/specs/2026-09-29-native-coreml-design.md`;
