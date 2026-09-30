@@ -15,13 +15,12 @@ pub struct DirEntry {
 }
 
 /// Lists the direct children of `directory_path`.
-///
-/// Entries that can't be inspected (e.g. broken symlinks or permission errors)
-/// are skipped rather than failing the whole listing.
 #[tauri::command]
 pub async fn read_directory(directory_path: String) -> Result<Vec<DirEntry>, String> {
-    list_directory(Path::new(&directory_path))
+    let dir = PathBuf::from(&directory_path);
+    tauri::async_runtime::spawn_blocking(move || list_directory(&dir))
         .await
+        .map_err(|e| e.to_string())?
         .map_err(|e| format!("Failed to read directory \"{directory_path}\": {e}"))
 }
 
@@ -35,18 +34,21 @@ pub async fn read_file(file_path: String) -> Result<Response, String> {
         .map_err(|e| format!("Failed to read file \"{file_path}\": {e}"))
 }
 
-async fn list_directory(dir: &Path) -> std::io::Result<Vec<DirEntry>> {
-    let mut read_dir = tokio::fs::read_dir(dir).await?;
+/// Lists the direct children of `dir`, sorted by name.
+///
+/// Entries that can't be inspected (e.g. broken symlinks or permission errors)
+/// are skipped rather than failing the whole listing.
+pub fn list_directory(dir: &Path) -> std::io::Result<Vec<DirEntry>> {
     let mut entries = Vec::new();
 
-    while let Some(entry) = read_dir.next_entry().await? {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
         let path = entry.path();
         let is_symlink = entry
             .file_type()
-            .await
             .is_ok_and(|file_type| file_type.is_symlink());
         // `metadata` follows symlinks, so a link to an image counts as a file.
-        let Ok(metadata) = tokio::fs::metadata(&path).await else {
+        let Ok(metadata) = std::fs::metadata(&path) else {
             log::warn!("Skipping {}: could not read metadata", path.display());
             continue;
         };
@@ -66,24 +68,16 @@ async fn list_directory(dir: &Path) -> std::io::Result<Vec<DirEntry>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::TempDir;
 
-    fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("eye-see-test-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    #[tokio::test]
-    async fn lists_files_and_directories_sorted() {
-        let dir = temp_dir("list");
+    #[test]
+    fn lists_files_and_directories_sorted() {
+        let dir = TempDir::new("list");
         std::fs::write(dir.join("b.png"), b"png").unwrap();
         std::fs::write(dir.join("a.jpg"), b"jpg").unwrap();
         std::fs::create_dir(dir.join("nested")).unwrap();
 
-        let entries = read_directory(dir.to_string_lossy().into_owned())
-            .await
-            .unwrap();
+        let entries = list_directory(dir.path()).unwrap();
 
         assert_eq!(
             entries,
@@ -108,46 +102,44 @@ mod tests {
                 },
             ]
         );
-        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[cfg(unix)]
-    #[tokio::test]
-    async fn skips_broken_symlinks() {
-        let dir = temp_dir("symlink");
+    #[test]
+    fn skips_broken_symlinks() {
+        let dir = TempDir::new("symlink");
         std::fs::write(dir.join("ok.png"), b"png").unwrap();
         std::os::unix::fs::symlink(dir.join("missing.png"), dir.join("broken.png")).unwrap();
 
-        let entries = read_directory(dir.to_string_lossy().into_owned())
-            .await
-            .unwrap();
+        let entries = list_directory(dir.path()).unwrap();
 
         let names: Vec<_> = entries.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, ["ok.png"]);
-        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[cfg(unix)]
-    #[tokio::test]
-    async fn flags_symlinks() {
-        let dir = temp_dir("flags-symlink");
+    #[test]
+    fn flags_symlinks() {
+        let dir = TempDir::new("flags-symlink");
         std::fs::create_dir(dir.join("real")).unwrap();
         std::os::unix::fs::symlink(dir.join("real"), dir.join("link")).unwrap();
 
-        let entries = read_directory(dir.to_string_lossy().into_owned())
-            .await
-            .unwrap();
+        let entries = list_directory(dir.path()).unwrap();
 
         let flags: Vec<_> = entries
             .iter()
             .map(|e| (e.name.as_str(), e.is_file, e.is_symlink))
             .collect();
         assert_eq!(flags, [("link", false, true), ("real", false, false)]);
-        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn missing_directory_is_an_error() {
+        assert!(list_directory(Path::new("/definitely/not/a/real/dir")).is_err());
     }
 
     #[tokio::test]
-    async fn missing_directory_is_an_error() {
+    async fn read_directory_names_the_missing_directory() {
         let err = read_directory("/definitely/not/a/real/dir".into())
             .await
             .unwrap_err();

@@ -1,4 +1,7 @@
 mod fs;
+mod images;
+#[cfg(test)]
+mod test_support;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
