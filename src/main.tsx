@@ -11,7 +11,7 @@ import './index.css';
 initColorMode();
 
 if (import.meta.env.IS_BENCHMARK_MODE === 'true') {
-  // The benchmark loads the model itself, once per dtype it measures
+  // Rust loads the model at startup; the hook only drives the benchmark
   installBenchmark();
 } else {
   // Load model in background - don't block render

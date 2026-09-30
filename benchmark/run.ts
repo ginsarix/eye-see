@@ -3,8 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
-import { DTYPES, IMAGE_COUNT, parseList, QUERY, RUNS, WARMUPS } from './options.ts';
+import { IMAGE_COUNT, QUERY, RUNS, WARMUPS } from './options.ts';
 import { completeResults, formatReport, type BenchmarkReport, type RunResults } from './report.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,17 +14,6 @@ const startedAt = new Date();
 function fail(message: string): never {
   console.error(message);
   process.exit(1);
-}
-
-function parseOptions() {
-  try {
-    const { values } = parseArgs({
-      options: { dtypes: { type: 'string' } },
-    });
-    return parseList(values.dtypes, DTYPES, 'dtypes');
-  } catch (error) {
-    return fail(error instanceof Error ? error.message : String(error));
-  }
 }
 
 function run(args: string[], env: NodeJS.ProcessEnv) {
@@ -42,8 +30,6 @@ function git(...args: string[]) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 }
 
-const dtypes = parseOptions();
-
 const imageCount = existsSync(imagesDir)
   ? readdirSync(imagesDir).filter((name) => name.endsWith('.jpeg')).length
   : 0;
@@ -51,24 +37,20 @@ if (imageCount !== IMAGE_COUNT) {
   fail(`Expected ${IMAGE_COUNT} .jpeg images in ${imagesDir}, found ${imageCount}`);
 }
 
-// Benchmark mode loads the model on WebGPU and fails instead of falling back to WASM
+// Benchmark mode installs the hook the WebdriverIO spec drives
 const env = { ...process.env, IS_BENCHMARK_MODE: 'true' };
 
-function measure(): RunResults | { error: string } {
+function measure(): RunResults {
   console.log('\n=== Building ===\n');
   if (!run(['tauri', 'build', '--no-bundle', '--features', 'e2e'], env)) return { error: 'Build failed' };
 
-  console.log(`\n=== Measuring ${dtypes.join(', ')} ===\n`);
+  console.log('\n=== Measuring ===\n');
   const output = path.join(os.tmpdir(), `eye-see-benchmark-${process.pid}.json`);
   rmSync(output, { force: true });
-  const succeeded = run(['wdio', 'run', 'wdio.benchmark.conf.ts'], {
-    ...env,
-    BENCHMARK_DTYPES: dtypes.join(','),
-    BENCHMARK_OUTPUT: output,
-  });
+  const succeeded = run(['wdio', 'run', 'wdio.benchmark.conf.ts'], { ...env, BENCHMARK_OUTPUT: output });
   const written = existsSync(output) ? (JSON.parse(readFileSync(output, 'utf8')) as RunResults) : null;
   rmSync(output, { force: true });
-  return completeResults(written, dtypes, succeeded);
+  return completeResults(written, succeeded);
 }
 
 const results = measure();
@@ -103,5 +85,4 @@ writeFileSync(path.join(resultsDir, `${name}.json`), JSON.stringify(report, null
 writeFileSync(path.join(resultsDir, `${name}.md`), markdown);
 console.log(`\n${markdown}\nSaved to benchmark/results/${name}.{json,md}`);
 
-// Some dtypes may be unsupported, so only the run failing as a whole counts as a failure
 if ('error' in results) process.exitCode = 1;

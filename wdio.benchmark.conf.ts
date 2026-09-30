@@ -23,8 +23,8 @@ export const config: WebdriverIO.Config = {
   capabilities: [tauriCapabilities],
   mochaOpts: {
     ...e2eConfig.mochaOpts,
-    // Each dtype has its own 3-hour limit in the spec; this only has to outlast all six
-    timeout: 12 * 60 * 60_000,
+    // The spec gives the run 30 minutes; this only has to outlast that
+    timeout: 60 * 60_000,
   },
   onPrepare: undefined,
 };
