@@ -1,3 +1,4 @@
+mod benchmark;
 mod clip;
 mod engine_state;
 mod fs;
@@ -34,6 +35,7 @@ pub fn run() {
             fs::read_file,
             engine_state::model_state,
             search::search,
+            benchmark::benchmark_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
