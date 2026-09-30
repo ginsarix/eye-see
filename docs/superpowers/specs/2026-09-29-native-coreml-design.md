@@ -2,7 +2,7 @@
 
 Date: 2026-09-29
 Branch: `feat/native-coreml` (macOS only; not intended for `main` as-is)
-Status: draft, waiting for review
+Status: approved 2026-09-30; see the plan's "Deviations from the spec"
 
 ## Goal
 
