@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "wdio run wdio.conf.ts",
-    "benchmark": "node benchmark/run.ts"
+    "benchmark": "node benchmark/run.ts",
+    "models": "sh scripts/models.sh"
   },
   "keywords": [],
   "author": {
