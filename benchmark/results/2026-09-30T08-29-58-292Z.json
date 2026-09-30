@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-09-30T08:29:58.292Z",
+  "commit": {
+    "sha": "c149b90714f2bb5416ad25ba40001429a4da5de8",
+    "dirty": true
+  },
+  "machine": {
+    "os": "darwin 25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M3",
+    "cores": 8,
+    "memoryGB": 16
+  },
+  "imageCount": 128,
+  "query": "a dog running on the beach",
+  "warmups": 1,
+  "runs": 3,
+  "results": {
+    "loadMs": 1757.2079170000002,
+    "imageCount": 128,
+    "runs": [
+      {
+        "listMs": 0.366,
+        "prepareMs": 165.35229199999998,
+        "inferenceMs": 558.43525,
+        "totalMs": 724.3161249999999
+      },
+      {
+        "listMs": 0.38304099999999996,
+        "prepareMs": 163.855333,
+        "inferenceMs": 558.7303330000001,
+        "totalMs": 723.140166
+      },
+      {
+        "listMs": 0.41395899999999997,
+        "prepareMs": 167.214958,
+        "inferenceMs": 557.40775,
+        "totalMs": 725.2002910000001
+      }
+    ],
+    "median": {
+      "listMs": 0.38304099999999996,
+      "prepareMs": 165.35229199999998,
+      "inferenceMs": 558.43525,
+      "totalMs": 724.3161249999999
+    },
+    "imagesPerSecond": 176.71841835634962,
+    "accuracy": {
+      "recallAt1": 0.96875,
+      "recallAt5": 1,
+      "mrr": 0.9817708333333333
+    }
+  }
+}
