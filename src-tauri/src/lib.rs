@@ -1,3 +1,4 @@
+mod clip;
 mod fs;
 mod images;
 #[cfg(test)]
