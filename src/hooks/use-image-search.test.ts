@@ -6,46 +6,44 @@ import {
   directoryFieldInvalidAtom,
   includeSubdirectoriesAtom,
 } from '../atoms/directory';
-import { batchSizeAtom } from '../atoms/batch-size';
-import {
-  getSimilarImages,
-  type SimilarityFinalResult,
-  type SimilarityProgress,
-} from '../lib/similarity';
+import { searchImages, type SearchEvent, type SearchOutcome } from '../lib/engine';
 import { renderHookWithStore } from '../test/utils';
 import { useImageSearch } from './use-image-search';
 
-vi.mock('../lib/similarity', () => ({ getSimilarImages: vi.fn() }));
+vi.mock('../lib/engine', () => ({ searchImages: vi.fn() }));
 
 const files = ['cat.jpg', 'sub/dog.png'];
 
-const finalResult: SimilarityFinalResult = {
-  results: [{ fileName: 'cat.jpg', path: '/photos/cat.jpg', score: 0.9 }],
-  filesProcessed: 2,
+const outcome: SearchOutcome = {
+  matches: [{ fileName: 'cat.jpg', path: '/photos/cat.jpg', score: 0.9 }],
   files,
+  filesProcessed: 2,
 };
 
-function mockSearch(generator: () => AsyncGenerator<SimilarityProgress, SimilarityFinalResult>) {
-  vi.mocked(getSimilarImages).mockImplementation(generator);
+type OnEvent = (event: SearchEvent) => void;
+
+function mockSearch(implementation: (onEvent: OnEvent) => Promise<SearchOutcome>) {
+  vi.mocked(searchImages).mockImplementation((_dir, _query, _includeSubdirectories, onEvent) =>
+    implementation(onEvent),
+  );
 }
 
 function mockInstantSearch() {
-  mockSearch(async function* () {
-    yield { filesProcessed: 0, files };
-    return finalResult;
+  mockSearch(async (onEvent) => {
+    onEvent({ kind: 'files', files });
+    return outcome;
   });
 }
 
-function storeWith(directory: string | null, batchSize = 8) {
+function storeWith(directory: string | null) {
   const store = createStore();
   store.set(directoryAtom, directory);
-  store.set(batchSizeAtom, batchSize);
   return store;
 }
 
 describe('useImageSearch', () => {
   beforeEach(() => {
-    vi.mocked(getSimilarImages).mockReset();
+    vi.mocked(searchImages).mockReset();
   });
 
   it('flags the directory field when no directory is selected', async () => {
@@ -54,7 +52,7 @@ describe('useImageSearch', () => {
     await act(() => result.current.search('cat'));
 
     expect(store.get(directoryFieldInvalidAtom)).toBe(true);
-    expect(getSimilarImages).not.toHaveBeenCalled();
+    expect(searchImages).not.toHaveBeenCalled();
     expect(result.current.current).toBeNull();
   });
 
@@ -63,31 +61,30 @@ describe('useImageSearch', () => {
 
     await act(() => result.current.search('   '));
 
-    expect(getSimilarImages).not.toHaveBeenCalled();
+    expect(searchImages).not.toHaveBeenCalled();
     expect(result.current.history).toEqual([]);
   });
 
   it('searches the selected directory and returns the results', async () => {
-    mockSearch(async function* () {
-      yield { filesProcessed: 0, files };
-      yield { filesProcessed: 2, files };
-      return finalResult;
+    mockSearch(async (onEvent) => {
+      onEvent({ kind: 'files', files });
+      onEvent({ kind: 'progress', filesProcessed: 2 });
+      return outcome;
     });
-    const store = storeWith('/d', 4);
+    const store = storeWith('/d');
     store.set(includeSubdirectoriesAtom, true);
     const { result } = renderHookWithStore(() => useImageSearch(), store);
 
     await act(() => result.current.search('  cat  '));
 
-    expect(getSimilarImages).toHaveBeenCalledWith('cat', '/d', 4, true);
+    expect(searchImages).toHaveBeenCalledWith('/d', 'cat', true, expect.any(Function));
     expect(result.current.current).toEqual({
       id: 1,
       query: 'cat',
-      batchSize: 4,
       status: 'done',
       files,
       filesProcessed: 2,
-      results: finalResult.results,
+      results: outcome.matches,
       elapsedMs: expect.any(Number),
     });
     expect(result.current.searching).toBe(false);
@@ -96,10 +93,11 @@ describe('useImageSearch', () => {
   it('reports progress while searching and ignores searches until it finishes', async () => {
     let finish!: () => void;
     const finished = new Promise<void>((resolve) => (finish = resolve));
-    mockSearch(async function* () {
-      yield { filesProcessed: 1, files };
+    mockSearch(async (onEvent) => {
+      onEvent({ kind: 'files', files });
+      onEvent({ kind: 'progress', filesProcessed: 1 });
       await finished;
-      return finalResult;
+      return outcome;
     });
     const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d'));
 
@@ -113,11 +111,28 @@ describe('useImageSearch', () => {
     expect(result.current.searching).toBe(true);
 
     await act(() => result.current.search('dog'));
-    expect(getSimilarImages).toHaveBeenCalledTimes(1);
+    expect(searchImages).toHaveBeenCalledTimes(1);
 
     finish();
     await act(() => search);
     expect(result.current.current?.status).toBe('done');
+  });
+
+  it('ignores events that arrive after the search finished', async () => {
+    let lateEvent!: OnEvent;
+    mockSearch(async (onEvent) => {
+      lateEvent = onEvent;
+      return outcome;
+    });
+    const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d'));
+    await act(() => result.current.search('cat'));
+
+    act(() => {
+      lateEvent({ kind: 'files', files: [] });
+      lateEvent({ kind: 'progress', filesProcessed: 0 });
+    });
+
+    expect(result.current.current).toMatchObject({ status: 'done', files, filesProcessed: 2 });
   });
 
   it('keeps the four most recent distinct queries, newest first', async () => {
@@ -143,17 +158,17 @@ describe('useImageSearch', () => {
   });
 
   it('marks the search as failed and logs when it throws', async () => {
-    const error = new Error('boom');
+    // Rust errors reach the frontend as strings
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    mockSearch(async function* () {
-      yield { filesProcessed: 1, files };
-      throw error;
+    mockSearch(async (onEvent) => {
+      onEvent({ kind: 'progress', filesProcessed: 1 });
+      throw 'Failed to read directory "/d"';
     });
     const { result } = renderHookWithStore(() => useImageSearch(), storeWith('/d'));
 
     await act(() => result.current.search('cat'));
 
-    expect(consoleError).toHaveBeenCalledWith(error);
+    expect(consoleError).toHaveBeenCalledWith('Failed to read directory "/d"');
     expect(result.current.current).toMatchObject({
       status: 'error',
       filesProcessed: 1,

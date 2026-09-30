@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useImageUrl } from '../hooks/use-image-url';
 import type { ImageSearch } from '../hooks/use-image-search';
 import { extensionLabel, splitRelativePath } from '../lib/paths';
-import type { SimilarityMatch } from '../lib/similarity';
+import type { SearchMatch } from '../lib/engine';
 
 const RING_SCORES = [0.4, 0.3, 0.2, 0.1];
 
@@ -22,7 +22,7 @@ function dotPosition(index: number, score: number) {
   return { left: `${50 + r * Math.cos(angle)}%`, top: `${50 + r * Math.sin(angle)}%` };
 }
 
-function PupilImage({ match, onOpen }: { match: SimilarityMatch; onOpen: () => void }) {
+function PupilImage({ match, onOpen }: { match: SearchMatch; onOpen: () => void }) {
   const image = useImageUrl(match.path);
   const [decodeFailed, setDecodeFailed] = useState(false);
 
@@ -46,7 +46,7 @@ function PupilImage({ match, onOpen }: { match: SimilarityMatch; onOpen: () => v
   );
 }
 
-function Tooltip({ match, position }: { match: SimilarityMatch; position: { left: string; top: string } }) {
+function Tooltip({ match, position }: { match: SearchMatch; position: { left: string; top: string } }) {
   const image = useImageUrl(match.path);
   const { dir, base } = splitRelativePath(match.fileName);
 
@@ -79,7 +79,7 @@ type IrisProps = {
   hoveredIndex: number | null;
   onSelect: (index: number) => void;
   onHover: (index: number | null) => void;
-  onOpen: (match: SimilarityMatch) => void;
+  onOpen: (match: SearchMatch) => void;
 };
 
 // A radial plot of the results: the closer a dot is to the pupil, the better

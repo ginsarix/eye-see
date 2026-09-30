@@ -27,7 +27,7 @@ export const config: WebdriverIO.Config = {
   framework: 'mocha',
   mochaOpts: {
     ui: 'bdd',
-    // The first run downloads the CLIP model
+    // Generous, since a debug build decodes images slowly
     timeout: 10 * 60_000,
   },
   reporters: ['spec'],

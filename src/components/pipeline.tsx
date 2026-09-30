@@ -1,4 +1,5 @@
 import type { ImageSearch } from '../hooks/use-image-search';
+import { BATCH_SIZE } from '../lib/engine';
 import { splitRelativePath } from '../lib/paths';
 
 // Keeps the sidebar a sensible height for folders with many images
@@ -48,7 +49,7 @@ function PipelineMessage({ children }: { children: string }) {
 
 export function Pipeline({ search }: { search: ImageSearch | null }) {
   const rows = search
-    ? buildPipelineRows(search.files, search.batchSize, search.filesProcessed)
+    ? buildPipelineRows(search.files, BATCH_SIZE, search.filesProcessed)
     : [];
   const hidden = rows.length - MAX_ROWS;
 

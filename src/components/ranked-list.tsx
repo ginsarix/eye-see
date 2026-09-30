@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ImageSearch } from '../hooks/use-image-search';
 import { splitRelativePath } from '../lib/paths';
-import type { SimilarityMatch } from '../lib/similarity';
+import type { SearchMatch } from '../lib/engine';
 import { ResultThumbnail } from './result-thumbnail';
 
 type RankedListProps = {
@@ -12,7 +12,7 @@ type RankedListProps = {
   scrollToSelected: boolean;
   onSelect: (index: number) => void;
   onHover: (index: number | null) => void;
-  onOpen: (match: SimilarityMatch) => void;
+  onOpen: (match: SearchMatch) => void;
 };
 
 function Message({ children }: { children: string }) {

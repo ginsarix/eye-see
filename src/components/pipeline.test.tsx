@@ -7,7 +7,6 @@ function searchWith(patch: Partial<ImageSearch>): ImageSearch {
   return {
     id: 1,
     query: 'cat',
-    batchSize: 2,
     status: 'searching',
     files: [],
     filesProcessed: 0,
@@ -63,7 +62,7 @@ describe('Pipeline', () => {
     expect(rows.map((row) => row.textContent)).toEqual([
       'a.jpg, doneb1',
       'b.jpg, doneb1',
-      'c.jpg, pendingb2',
+      'c.jpg, pendingb1',
     ]);
   });
 

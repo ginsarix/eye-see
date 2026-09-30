@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { LuImageOff } from 'react-icons/lu';
 import { useImageUrl } from '../hooks/use-image-url';
 import { extensionLabel } from '../lib/paths';
-import type { SimilarityMatch } from '../lib/similarity';
+import type { SearchMatch } from '../lib/engine';
 
 type ResultThumbnailProps = {
-  match: SimilarityMatch;
+  match: SearchMatch;
   onOpen: () => void;
 };
 

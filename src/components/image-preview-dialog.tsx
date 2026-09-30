@@ -2,10 +2,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { LuImageOff, LuX } from 'react-icons/lu';
 import { useImageUrl } from '../hooks/use-image-url';
 import { splitRelativePath } from '../lib/paths';
-import type { SimilarityMatch } from '../lib/similarity';
+import type { SearchMatch } from '../lib/engine';
 
 type ImagePreviewDialogProps = {
-  match: SimilarityMatch;
+  match: SearchMatch;
   onClose: () => void;
 };
 

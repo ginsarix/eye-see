@@ -59,7 +59,7 @@ describe('image search', () => {
     await browser.refresh();
 
     await expect($(`p[title="${imagesDir}"]`)).toBeDisplayed();
-    // Searching stays disabled until the model has downloaded and is ready
+    // Searching stays disabled until Rust has loaded the model
     await browser.waitUntil(() => $('button[aria-label="Look"]').isEnabled(), {
       timeout: 10 * 60_000,
       interval: 1_000,

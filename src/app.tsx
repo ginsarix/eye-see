@@ -1,6 +1,5 @@
 import { Header } from './components/header';
 import { DirectorySelector } from './components/directory-selector';
-import { BatchSizeSelector } from './components/batch-size-selector';
 import { Pipeline } from './components/pipeline';
 import { SearchForm } from './components/search-form';
 import { SearchResults } from './components/search-results';
@@ -21,7 +20,6 @@ export default function App() {
       <main className="flex flex-1 flex-wrap gap-px border-y border-line bg-line">
         <aside className="flex max-w-full flex-[1_1_260px] flex-col gap-9 bg-canvas p-7">
           <DirectorySelector />
-          <BatchSizeSelector fileCount={current?.files.length} />
           <Pipeline search={current} />
         </aside>
 

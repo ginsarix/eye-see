@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { splitRelativePath } from '../lib/paths';
-import type { SimilarityMatch } from '../lib/similarity';
+import type { SearchMatch } from '../lib/engine';
 
 type SelectedMatchProps = {
-  match: SimilarityMatch;
+  match: SearchMatch;
   rank: number;
   total: number;
   onOpen: () => void;

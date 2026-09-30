@@ -1,10 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
 use tauri::ipc::Response;
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DirEntry {
     pub name: String,
     pub path: PathBuf,
@@ -12,16 +10,6 @@ pub struct DirEntry {
     /// Whether the entry itself is a symlink, so callers walking the tree
     /// can avoid following links into cycles.
     pub is_symlink: bool,
-}
-
-/// Lists the direct children of `directory_path`.
-#[tauri::command]
-pub async fn read_directory(directory_path: String) -> Result<Vec<DirEntry>, String> {
-    let dir = PathBuf::from(&directory_path);
-    tauri::async_runtime::spawn_blocking(move || list_directory(&dir))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| format!("Failed to read directory \"{directory_path}\": {e}"))
 }
 
 /// Reads a whole file and sends it to the frontend as an `ArrayBuffer`,
@@ -136,14 +124,6 @@ mod tests {
     #[test]
     fn missing_directory_is_an_error() {
         assert!(list_directory(Path::new("/definitely/not/a/real/dir")).is_err());
-    }
-
-    #[tokio::test]
-    async fn read_directory_names_the_missing_directory() {
-        let err = read_directory("/definitely/not/a/real/dir".into())
-            .await
-            .unwrap_err();
-        assert!(err.contains("/definitely/not/a/real/dir"), "{err}");
     }
 
     #[tokio::test]

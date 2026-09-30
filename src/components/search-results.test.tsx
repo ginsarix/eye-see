@@ -11,7 +11,6 @@ function searchWith(patch: Partial<ImageSearch> = {}): ImageSearch {
   return {
     id: 1,
     query: 'a cat',
-    batchSize: 8,
     status: 'done',
     files: ['cat.jpg', 'pets/dog.png', 'car.webp'],
     filesProcessed: 3,

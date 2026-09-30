@@ -1,10 +1,11 @@
 import type { ImageSearch } from '../hooks/use-image-search';
+import { BATCH_SIZE } from '../lib/engine';
 
 export function Telemetry({ search }: { search: ImageSearch | null }) {
-  const batches = search ? Math.ceil(search.files.length / search.batchSize) : 0;
+  const batches = search ? Math.ceil(search.files.length / BATCH_SIZE) : 0;
   const stats = [
     { label: 'Files processed', value: search ? String(search.filesProcessed) : '—' },
-    { label: 'Batches', value: batches ? `${batches} × ${search?.batchSize}` : '—' },
+    { label: 'Batches', value: batches ? `${batches} × ${BATCH_SIZE}` : '—' },
     {
       label: 'Elapsed',
       value: search?.elapsedMs != null ? `${(search.elapsedMs / 1000).toFixed(2)}s` : '—',

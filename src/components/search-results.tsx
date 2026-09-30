@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ImageSearch } from '../hooks/use-image-search';
-import type { SimilarityMatch } from '../lib/similarity';
+import type { SearchMatch } from '../lib/engine';
 import { ImagePreviewDialog } from './image-preview-dialog';
 import { Iris } from './iris';
 import { RankedList } from './ranked-list';
@@ -18,7 +18,7 @@ export function SearchResults({ search }: { search: ImageSearch | null }) {
   const [selected, setSelected] = useState(0);
   const [hovered, setHovered] = useState<number | null>(null);
   const [movedByKeyboard, setMovedByKeyboard] = useState(false);
-  const [preview, setPreview] = useState<SimilarityMatch | null>(null);
+  const [preview, setPreview] = useState<SearchMatch | null>(null);
 
   const results = search?.status === 'done' ? search.results : [];
   const focusIndex = results.length > 0 ? (hovered ?? selected) : null;

@@ -31,7 +31,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            fs::read_directory,
             fs::read_file,
             engine_state::model_state,
             search::search,

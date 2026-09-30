@@ -17,7 +17,6 @@ describe('Telemetry', () => {
         search={{
           id: 1,
           query: 'cat',
-          batchSize: 4,
           status: 'done',
           files: Array.from({ length: 9 }, (_, i) => `${i}.jpg`),
           filesProcessed: 9,
@@ -28,7 +27,7 @@ describe('Telemetry', () => {
     );
 
     expect(screen.getByRole('contentinfo')).toHaveTextContent(
-      'Files processed 9Batches 3 × 4Elapsed 1.62s',
+      'Files processed 9Batches 1 × 32Elapsed 1.62s',
     );
   });
 });
