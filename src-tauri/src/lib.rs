@@ -1,6 +1,7 @@
 mod clip;
 mod fs;
 mod images;
+mod search;
 #[cfg(test)]
 mod test_support;
 
