@@ -1,11 +1,15 @@
 use std::path::{Path, PathBuf};
+use std::sync::PoisonError;
 use std::time::Instant;
 
 use rayon::prelude::*;
 use serde::Serialize;
+use tauri::State;
+use tauri::ipc::Channel;
 
 use crate::clip::preprocess::preprocess;
 use crate::clip::{BATCH_SIZE, Embedder};
+use crate::engine_state::EngineState;
 use crate::images::{ImageFile, list_images};
 
 /// How many of the best matches a search returns
@@ -145,6 +149,37 @@ pub fn run_search(
         files,
         files_processed,
     })
+}
+
+/// Searches `dir` for the images that best match `query`, streaming the file
+/// list and progress over `on_event`. Runs off the async runtime, since it's
+/// CPU- and GPU-bound.
+#[tauri::command]
+pub async fn search(
+    engine: State<'_, EngineState>,
+    dir: String,
+    query: String,
+    include_subdirectories: bool,
+    on_event: Channel<SearchEvent>,
+) -> Result<SearchOutcome, String> {
+    let embedder = engine.ready()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let embedder = embedder.lock().unwrap_or_else(PoisonError::into_inner);
+        run_search(
+            &*embedder,
+            Path::new(&dir),
+            &query,
+            include_subdirectories,
+            &mut StageTimings::default(),
+            |event| {
+                if let Err(error) = on_event.send(event) {
+                    log::warn!("Failed to send a search event: {error}");
+                }
+            },
+        )
+    })
+    .await
+    .map_err(|e| format!("The search stopped unexpectedly: {e}"))?
 }
 
 #[cfg(test)]
