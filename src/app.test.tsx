@@ -2,28 +2,32 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getModelState, onModelState } from './lib/engine';
 import { getSimilarImages } from './lib/similarity';
 import { renderWithStore } from './test/utils';
 import App from './app';
 
-const clip = vi.hoisted(() => ({
-  modelLoadState: { status: 'ready' } as import('./lib/clip').ModelLoadState,
-}));
-
-vi.mock('./lib/clip', () => ({
-  get modelLoadState() {
-    return clip.modelLoadState;
-  },
-  subscribeToModelLoadState: () => () => undefined,
+vi.mock('./lib/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/engine')>()),
+  getModelState: vi.fn(),
+  onModelState: vi.fn(),
+  searchImages: vi.fn(),
 }));
 
 vi.mock('./lib/similarity', () => ({ getSimilarImages: vi.fn() }));
 
 const queryInput = () => screen.getByLabelText('What are you looking for?');
 
+// Renders the app and waits until the model reports ready
+async function renderReadyApp() {
+  renderWithStore(<App />);
+  await screen.findByText('Model ready');
+}
+
 describe('App', () => {
   beforeEach(() => {
-    clip.modelLoadState = { status: 'ready' };
+    vi.mocked(getModelState).mockResolvedValue({ status: 'ready' });
+    vi.mocked(onModelState).mockResolvedValue(() => undefined);
     mockIPC((cmd) => {
       if (cmd === 'plugin:dialog|open') return '/photos';
       if (cmd === 'read_file') return new ArrayBuffer(0);
@@ -45,11 +49,10 @@ describe('App', () => {
   });
 
   it.each([
-    ['downloading', { status: 'downloading', progress: 30 }],
-    ['being prepared', { status: 'preparing' }],
-    ['failed to load', { status: 'error' }],
+    ['loading', { status: 'loading' }],
+    ['failed to load', { status: 'error', message: 'Models not found' }],
   ] as const)('blocks searching while the model is %s', async (_, state) => {
-    clip.modelLoadState = state;
+    vi.mocked(getModelState).mockResolvedValue(state);
     renderWithStore(<App />);
     await userEvent.click(screen.getByRole('button', { name: 'Choose directory' }));
     await screen.findByText('photos');
@@ -61,7 +64,7 @@ describe('App', () => {
   });
 
   it('asks for a directory before searching', async () => {
-    renderWithStore(<App />);
+    await renderReadyApp();
 
     await userEvent.type(queryInput(), 'sunset{Enter}');
 
@@ -70,7 +73,7 @@ describe('App', () => {
   });
 
   it('searches the chosen directory and shows the results', async () => {
-    renderWithStore(<App />);
+    await renderReadyApp();
 
     await userEvent.click(screen.getByRole('button', { name: 'Choose directory' }));
     expect(await screen.findByText('photos')).toBeInTheDocument();
@@ -94,7 +97,7 @@ describe('App', () => {
   });
 
   it('resets the selection for each new search', async () => {
-    renderWithStore(<App />);
+    await renderReadyApp();
     await userEvent.click(screen.getByRole('button', { name: 'Choose directory' }));
     await screen.findByText('photos');
 

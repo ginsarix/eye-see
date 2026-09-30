@@ -1,45 +1,67 @@
-import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import type { ModelLoadState } from '../lib/clip';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getModelState, onModelState, type ModelState } from '../lib/engine';
 import { useModelLoadState } from './use-model-load-state';
 
-const clip = vi.hoisted(() => {
-  const listeners = new Set<(state: ModelLoadState) => void>();
-  return {
-    modelLoadState: { status: 'downloading', progress: null } as ModelLoadState,
-    listeners,
-    setState(state: ModelLoadState) {
-      clip.modelLoadState = state;
-      listeners.forEach((cb) => cb(state));
-    },
-  };
-});
+vi.mock('../lib/engine', () => ({ getModelState: vi.fn(), onModelState: vi.fn() }));
 
-vi.mock('../lib/clip', () => ({
-  get modelLoadState() {
-    return clip.modelLoadState;
-  },
-  subscribeToModelLoadState: (cb: (state: ModelLoadState) => void) => {
-    clip.listeners.add(cb);
-    return () => clip.listeners.delete(cb);
-  },
-}));
+let emitState: (state: ModelState) => void;
+const unlisten = vi.fn();
 
 describe('useModelLoadState', () => {
-  it('tracks the model load state', () => {
-    const { result, unmount } = renderHook(() => useModelLoadState());
-    expect(result.current).toEqual({ status: 'downloading', progress: null });
+  beforeEach(() => {
+    unlisten.mockReset();
+    vi.mocked(onModelState).mockImplementation(async (callback) => {
+      emitState = callback;
+      return unlisten;
+    });
+    vi.mocked(getModelState).mockResolvedValue({ status: 'loading' });
+  });
 
-    act(() => clip.setState({ status: 'downloading', progress: 40 }));
-    expect(result.current).toEqual({ status: 'downloading', progress: 40 });
+  it('starts loading, then shows the current state', async () => {
+    vi.mocked(getModelState).mockResolvedValue({ status: 'ready' });
 
-    act(() => clip.setState({ status: 'preparing' }));
-    expect(result.current).toEqual({ status: 'preparing' });
+    const { result } = renderHook(() => useModelLoadState());
 
-    act(() => clip.setState({ status: 'ready' }));
+    expect(result.current).toEqual({ status: 'loading' });
+    await waitFor(() => expect(result.current).toEqual({ status: 'ready' }));
+  });
+
+  it('follows model-state events', async () => {
+    const { result } = renderHook(() => useModelLoadState());
+    await waitFor(() => expect(getModelState).toHaveBeenCalled());
+
+    act(() => emitState({ status: 'error', message: 'Models not found' }));
+
+    expect(result.current).toEqual({ status: 'error', message: 'Models not found' });
+  });
+
+  it('asks for the state only once it listens, so it misses nothing in between', async () => {
+    renderHook(() => useModelLoadState());
+
+    await waitFor(() => expect(getModelState).toHaveBeenCalled());
+    expect(vi.mocked(onModelState).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(getModelState).mock.invocationCallOrder[0],
+    );
+  });
+
+  it('keeps an event that arrives before the fetched state', async () => {
+    let resolveFetch!: (state: ModelState) => void;
+    vi.mocked(getModelState).mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+    const { result } = renderHook(() => useModelLoadState());
+    await waitFor(() => expect(getModelState).toHaveBeenCalled());
+
+    act(() => emitState({ status: 'ready' }));
+    await act(async () => resolveFetch({ status: 'loading' }));
+
     expect(result.current).toEqual({ status: 'ready' });
+  });
+
+  it('stops listening on unmount', async () => {
+    const { unmount } = renderHook(() => useModelLoadState());
 
     unmount();
-    expect(clip.listeners.size).toBe(0);
+
+    await waitFor(() => expect(unlisten).toHaveBeenCalled());
   });
 });

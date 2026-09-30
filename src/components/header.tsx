@@ -1,13 +1,11 @@
 import { useModelLoadState } from '../hooks/use-model-load-state';
-import type { ModelLoadState } from '../lib/clip';
+import type { ModelState } from '../lib/engine';
 import { ColorModeButton } from './color-mode-button';
 
-function describeModelState(state: ModelLoadState): string {
+function describeModelState(state: ModelState): string {
   switch (state.status) {
-    case 'downloading':
-      return state.progress === null ? 'Loading model…' : `Downloading model · ${state.progress}%`;
-    case 'preparing':
-      return 'Preparing model…';
+    case 'loading':
+      return 'Loading model…';
     case 'ready':
       return 'Model ready';
     case 'error':
@@ -15,12 +13,13 @@ function describeModelState(state: ModelLoadState): string {
   }
 }
 
-function ModelStatus({ state }: { state: ModelLoadState }) {
-  const loading = state.status === 'downloading' || state.status === 'preparing';
+function ModelStatus({ state }: { state: ModelState }) {
+  const loading = state.status === 'loading';
 
   return (
     <div
       role="status"
+      title={state.status === 'error' ? state.message : undefined}
       className={`flex items-center gap-2.5 font-mono text-xs tabular-nums ${state.status === 'error' ? 'text-danger' : 'text-muted'}`}
     >
       <span
